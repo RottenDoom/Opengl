@@ -2,6 +2,8 @@
 set(SOURCES
         main.cpp
         glad.c
+        shader.cpp
+        stb_image.c
 )
 
 set(OBJ_DIR ${PROJECT_BINARY_DIR}/obj)
@@ -21,17 +23,17 @@ target_link_libraries(app
         #  -lglfw3 -lGL -lX11 -lpthread -lXrandr -lXi -ldl for linux
 )
 
-# copy_resources(app
-#     "${CMAKE_SOURCE_DIR}/shaders"
-#     "shaders"
-# )
+copy_resources(app
+    "${CMAKE_SOURCE_DIR}/shaders"
+    "shaders"
+)
 
 # copy_resources(app
 #     "${CMAKE_SOURCE_DIR}/texture"
 #     "texture"
 # )
 
-# copy_resources(app
-#     "${CMAKE_SOURCE_DIR}/resources"
-#     "resources"
-# )
+copy_resources(app
+    "${CMAKE_SOURCE_DIR}/resources"
+    "resources"
+)

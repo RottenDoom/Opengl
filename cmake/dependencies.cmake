@@ -39,4 +39,5 @@ target_link_libraries(dependencies
 target_include_directories(dependencies
     INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glad/include
 )

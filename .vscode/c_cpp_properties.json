@@ -20,6 +20,7 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/thirdparty/**",
+                "${workspaceFolder}/thirdparty/glad/include/**",
                 "${workspaceFolder}/include/**",
                 "${VULKAN_SDK}/include",
                 "${workspaceFolder}/build/_deps/**"
