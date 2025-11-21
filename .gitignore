@@ -53,4 +53,6 @@ CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
 
+*.gif
+
 [Bb][Uu][Ii][Ll][Dd]/
