@@ -35,13 +35,14 @@ uniform bool useEmission;
 void main()
 {
     // light source direction
-    vec3 lightDir = normalize(-light.direction);
+    // vec3 lightDir = normalize(-light.direction);
+    vec3 lightDir = normalize(light.position - FragPos);
     float distance = length(light.position - FragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * distance * distance);
 
     // ambient
     vec3 ambient = light.ambient * vec3(texture(material.diffuse, TexCoords));
-    ambient *= attenuation;
+    // ambient *= attenuation;
      // diffuse 
     vec3 norm = normalize(Normal);
     float diff = max(dot(norm, lightDir), 0.0);

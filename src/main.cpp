@@ -282,7 +282,7 @@ private:
         }
 
         void render() {
-                glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+                glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 
@@ -291,6 +291,7 @@ private:
                 shader->setVec3("light.direction", -0.2f, -1.0f, -0.3f);
                 shader->setVec3("light.position", lightPos);
                 shader->setVec3("viewPos", camera.Position);
+
 
                 // light properties
                 shader->setVec3("light.ambient", 0.2f, 0.2f, 0.2f); 
