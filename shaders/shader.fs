@@ -46,6 +46,7 @@ void main()
         emission = emission * (sin(time) * 0.5 + 0.5) * 2.0; 
     }
 
+    // wtf bro
     // specular
     vec3 viewDir = normalize(-FragPos);
     vec3 reflectDir = reflect(-lightDir, norm);  
