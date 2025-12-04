@@ -87,6 +87,7 @@ private:
 
         unsigned int diffuseMap;
         unsigned int specularMap;
+        unsigned int emissionMap;
 
         glm::vec3 lightPos{1.2f, 1.0f, 2.0f};
 
@@ -136,9 +137,11 @@ private:
                 lightCubeShader = std::make_unique<Shader>("shaders/lightShader.vs", "shaders/lightShader.fs");
         }
 
+
         void loadAssets() {
                 diffuseMap = loadTexture("resources/textures/container2.png");
                 specularMap = loadTexture("resources/textures/container2_specular.png");
+                emissionMap = loadTexture("resources/textures/matrix.jpg");
         }
         
         unsigned int loadTexture(char const* path) {
@@ -261,6 +264,7 @@ private:
                 glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+
                 // actual rendering and uniform  buffers
                 shader->use();
                 shader->setVec3("light.position", lightPos);
@@ -272,8 +276,8 @@ private:
                 shader->setVec3("light.specular", 1.0f, 1.0f, 1.0f);
 
                 // material properties
-                shader->setVec3("material.specular", 0.5f, 0.5f, 0.5f);
                 shader->setFloat("material.shininess", 64.0f);
+                shader->setFloat("time", glfwGetTime());
 
 
                 glm::mat4 projection = glm::perspective(
@@ -282,6 +286,7 @@ private:
                         0.1f,
                         100.0f
                 );
+
 
                 glm::mat4 view = camera.GetViewMatrix();
 
@@ -297,6 +302,9 @@ private:
 
                 glActiveTexture(GL_TEXTURE1);
                 glBindTexture(GL_TEXTURE_2D, specularMap);
+
+                glActiveTexture(GL_TEXTURE2);
+                glBindTexture(GL_TEXTURE_2D, emissionMap);
 
                 glBindVertexArray(cubeVAO);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -332,6 +340,7 @@ public:
                 shader->use();
                 shader->setInt("material.diffuse", 0);
                 shader->setInt("material.specular", 1);
+                shader->setInt("material.emission", 2);
         }
 
         void clear() {
