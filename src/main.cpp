@@ -16,7 +16,20 @@
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
+static bool emissionEnabled = false;
 
+glm::vec3 cubePositions[] = {
+    glm::vec3( 0.0f,  0.0f,  0.0f),
+    glm::vec3( 2.0f,  5.0f, -15.0f),
+    glm::vec3(-1.5f, -2.2f, -2.5f),
+    glm::vec3(-3.8f, -2.0f, -12.3f),
+    glm::vec3( 2.4f, -0.4f, -3.5f),
+    glm::vec3(-1.7f,  3.0f, -7.5f),
+    glm::vec3( 1.3f, -2.0f, -2.5f),
+    glm::vec3( 1.5f,  2.0f, -2.5f),
+    glm::vec3( 1.5f,  0.2f, -1.5f),
+    glm::vec3(-1.3f,  1.0f, -1.5f)
+};
 
 float vertices[] = {
     // positions          // normals           // texture coords
@@ -217,6 +230,14 @@ private:
 
         void processInput()
         {
+                // toggle for enabling and desabling emmision map
+                if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+                        emissionEnabled = !emissionEnabled;
+                        if (shader != nullptr) {
+                                shader->use();
+                                shader->setBool("useEmission", emissionEnabled);
+                        }
+                }
                 if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
                         glfwSetWindowShouldClose(window, true);
 
@@ -267,6 +288,7 @@ private:
 
                 // actual rendering and uniform  buffers
                 shader->use();
+                shader->setVec3("light.direction", -0.2f, -1.0f, -0.3f);
                 shader->setVec3("light.position", lightPos);
                 shader->setVec3("viewPos", camera.Position);
 
@@ -274,6 +296,10 @@ private:
                 shader->setVec3("light.ambient", 0.2f, 0.2f, 0.2f); 
                 shader->setVec3("light.diffuse", 0.5f, 0.5f, 0.5f);
                 shader->setVec3("light.specular", 1.0f, 1.0f, 1.0f);
+
+                shader->setFloat("light.constant",  1.0f);
+                shader->setFloat("light.linear",    0.09f);
+                shader->setFloat("light.quadratic", 0.032f);	
 
                 // material properties
                 shader->setFloat("material.shininess", 64.0f);
@@ -307,7 +333,16 @@ private:
                 glBindTexture(GL_TEXTURE_2D, emissionMap);
 
                 glBindVertexArray(cubeVAO);
-                glDrawArrays(GL_TRIANGLES, 0, 36);
+                for(unsigned int i = 0; i < 10; i++)
+                {
+                        glm::mat4 model = glm::mat4(1.0f);
+                        model = glm::translate(model, cubePositions[i]);
+                        float angle = 20.0f * i;
+                        model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+                        shader->setMat4("model", model);
+
+                        glDrawArrays(GL_TRIANGLES, 0, 36);
+                }
 
                 lightCubeShader->use();
                 lightCubeShader->setMat4("projection", projection);
@@ -341,6 +376,8 @@ public:
                 shader->setInt("material.diffuse", 0);
                 shader->setInt("material.specular", 1);
                 shader->setInt("material.emission", 2);
+
+                shader->setBool("useEmission", emissionEnabled);
         }
 
         void clear() {
