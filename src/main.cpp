@@ -288,19 +288,20 @@ private:
 
                 // actual rendering and uniform  buffers
                 shader->use();
-                shader->setVec3("light.direction", -0.2f, -1.0f, -0.3f);
-                shader->setVec3("light.position", lightPos);
+                shader->setVec3("light.direction", camera.Front);
+                shader->setVec3("light.position", camera.Position);
+                shader->setFloat("light.cutOff", glm::cos(glm::radians(12.5f)));
+                shader->setFloat("light.outerCutOff", glm::cos(glm::radians(17.5f)));
                 shader->setVec3("viewPos", camera.Position);
 
 
                 // light properties
-                shader->setVec3("light.ambient", 0.2f, 0.2f, 0.2f); 
-                shader->setVec3("light.diffuse", 0.5f, 0.5f, 0.5f);
+                shader->setVec3("light.ambient", 0.1f, 0.1f, 0.1f); 
+                shader->setVec3("light.diffuse", 0.8f, 0.8f, 0.8f);
                 shader->setVec3("light.specular", 1.0f, 1.0f, 1.0f);
-
-                shader->setFloat("light.constant",  1.0f);
-                shader->setFloat("light.linear",    0.09f);
-                shader->setFloat("light.quadratic", 0.032f);	
+                shader->setFloat("light.constant", 1.0f);
+                shader->setFloat("light.linear", 0.09f);
+                shader->setFloat("light.quadratic", 0.032f);
 
                 // material properties
                 shader->setFloat("material.shininess", 64.0f);
@@ -344,19 +345,18 @@ private:
 
                         glDrawArrays(GL_TRIANGLES, 0, 36);
                 }
+                // lightCubeShader->use();
+                // lightCubeShader->setMat4("projection", projection);
+                // lightCubeShader->setMat4("view", view);
 
-                lightCubeShader->use();
-                lightCubeShader->setMat4("projection", projection);
-                lightCubeShader->setMat4("view", view);
+                // model = glm::mat4(1.0f);
+                // model = glm::translate(model, lightPos);
+                // model = glm::scale(model, glm::vec3(0.2f));
 
-                model = glm::mat4(1.0f);
-                model = glm::translate(model, lightPos);
-                model = glm::scale(model, glm::vec3(0.2f));
+                // lightCubeShader->setMat4("model", model);
 
-                lightCubeShader->setMat4("model", model);
-
-                glBindVertexArray(lightVAO);
-                glDrawArrays(GL_TRIANGLES, 0, 36);
+                // glBindVertexArray(lightVAO);
+                // glDrawArrays(GL_TRIANGLES, 0, 36);
         }
 public:
 
