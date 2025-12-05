@@ -17,6 +17,7 @@ const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
 static bool emissionEnabled = false;
+#define NR_POINT_LIGHTS 4
 
 glm::vec3 cubePositions[] = {
     glm::vec3( 0.0f,  0.0f,  0.0f),
@@ -30,6 +31,13 @@ glm::vec3 cubePositions[] = {
     glm::vec3( 1.5f,  0.2f, -1.5f),
     glm::vec3(-1.3f,  1.0f, -1.5f)
 };
+
+glm::vec3 pointLightPositions[] = {
+	glm::vec3( 0.7f,  0.2f,  2.0f),
+	glm::vec3( 2.3f, -3.3f, -4.0f),
+	glm::vec3(-4.0f,  2.0f, -12.0f),
+	glm::vec3( 0.0f,  0.0f, -3.0f)
+};  
 
 float vertices[] = {
     // positions          // normals           // texture coords
@@ -87,6 +95,16 @@ float lastY = SCR_HEIGHT / 2.0f;
 
 bool firstMouse = true;
 
+struct PointLight {
+    glm::vec3 position;
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+    float constant;
+    float linear;
+    float quadratic;
+};
+
 class App
 {
 private:
@@ -98,6 +116,8 @@ private:
         std::unique_ptr<Shader> shader;
         std::unique_ptr<Shader> lightCubeShader;
 
+        std::vector<PointLight> pointLights;
+
         unsigned int diffuseMap;
         unsigned int specularMap;
         unsigned int emissionMap;
@@ -106,8 +126,6 @@ private:
 
         float deltaTime = 0.0f;
         float lastFrame = 0.0f;
-
-        
 
         int texwidth, texheight, texnrChannels;
 
@@ -288,20 +306,38 @@ private:
 
                 // actual rendering and uniform  buffers
                 shader->use();
-                shader->setVec3("light.direction", camera.Front);
-                shader->setVec3("light.position", camera.Position);
-                shader->setFloat("light.cutOff", glm::cos(glm::radians(12.5f)));
-                shader->setFloat("light.outerCutOff", glm::cos(glm::radians(17.5f)));
                 shader->setVec3("viewPos", camera.Position);
 
+                // directional light
+                shader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
+                shader->setVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
+                shader->setVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
+                shader->setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
 
-                // light properties
-                shader->setVec3("light.ambient", 0.1f, 0.1f, 0.1f); 
-                shader->setVec3("light.diffuse", 0.8f, 0.8f, 0.8f);
-                shader->setVec3("light.specular", 1.0f, 1.0f, 1.0f);
-                shader->setFloat("light.constant", 1.0f);
-                shader->setFloat("light.linear", 0.09f);
-                shader->setFloat("light.quadratic", 0.032f);
+                for (int i = 0; i < pointLights.size(); i++)
+                {
+                std::string index = "pointLights[" + std::to_string(i) + "]";
+
+                        shader->setVec3(index + ".position",  pointLights[i].position);
+                        shader->setVec3(index + ".ambient",   pointLights[i].ambient);
+                        shader->setVec3(index + ".diffuse",   pointLights[i].diffuse);
+                        shader->setVec3(index + ".specular",  pointLights[i].specular);
+                        shader->setFloat(index + ".constant", pointLights[i].constant);
+                        shader->setFloat(index + ".linear",   pointLights[i].linear);
+                        shader->setFloat(index + ".quadratic",pointLights[i].quadratic);
+                }
+
+                // spotLight
+                shader->setVec3("spotLight.position", camera.Position);
+                shader->setVec3("spotLight.direction", camera.Front);
+                shader->setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
+                shader->setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
+                shader->setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
+                shader->setFloat("spotLight.constant", 1.0f);
+                shader->setFloat("spotLight.linear", 0.09f);
+                shader->setFloat("spotLight.quadratic", 0.032f);
+                shader->setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+                shader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
 
                 // material properties
                 shader->setFloat("material.shininess", 64.0f);
@@ -345,18 +381,20 @@ private:
 
                         glDrawArrays(GL_TRIANGLES, 0, 36);
                 }
-                // lightCubeShader->use();
-                // lightCubeShader->setMat4("projection", projection);
-                // lightCubeShader->setMat4("view", view);
+                lightCubeShader->use();
+                lightCubeShader->setMat4("projection", projection);
+                lightCubeShader->setMat4("view", view);
 
-                // model = glm::mat4(1.0f);
-                // model = glm::translate(model, lightPos);
-                // model = glm::scale(model, glm::vec3(0.2f));
+                glBindVertexArray(lightVAO);
+                for (size_t i = 0; i < pointLights.size(); i++) {
+                        model = glm::mat4(1.0f);
+                        model = glm::translate(model, pointLightPositions[i]);
+                        model = glm::scale(model, glm::vec3(0.2f));
 
-                // lightCubeShader->setMat4("model", model);
+                        lightCubeShader->setMat4("model", model);
 
-                // glBindVertexArray(lightVAO);
-                // glDrawArrays(GL_TRIANGLES, 0, 36);
+                        glDrawArrays(GL_TRIANGLES, 0, 36);
+                }
         }
 public:
 
@@ -379,6 +417,17 @@ public:
                 shader->setInt("material.emission", 2);
 
                 shader->setBool("useEmission", emissionEnabled);
+                for (int i = 0; i < NR_POINT_LIGHTS; i++) {
+                        pointLights.push_back({
+                                pointLightPositions[i],
+                                {0.05f, 0.05f, 0.05f},
+                                {0.8f, 0.8f, 0.8f},
+                                {1.0f, 1.0f, 1.0f},
+                                1.0f,
+                                0.09f,
+                                0.032f
+                        });
+                }
         }
 
         void clear() {
