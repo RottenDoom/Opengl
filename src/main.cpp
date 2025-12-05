@@ -12,6 +12,7 @@
 
 #include "camera.h"
 #include "shader.h"
+#include "model.h"
 
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
@@ -116,7 +117,9 @@ private:
         std::unique_ptr<Shader> shader;
         std::unique_ptr<Shader> lightCubeShader;
 
-        std::vector<PointLight> pointLights;
+        std::unique_ptr<Model> backpackScene;
+
+        // std::vector<PointLight> pointLights;
 
         unsigned int diffuseMap;
         unsigned int specularMap;
@@ -164,15 +167,14 @@ private:
         }
 
         void createShader() {
-                shader = std::make_unique<Shader>("shaders/shader.vs", "shaders/shader.fs");
+                shader = std::make_unique<Shader>("shaders/modelShader.vs", "shaders/modelShader.fs");
                 lightCubeShader = std::make_unique<Shader>("shaders/lightShader.vs", "shaders/lightShader.fs");
         }
 
 
         void loadAssets() {
-                diffuseMap = loadTexture("resources/textures/container2.png");
-                specularMap = loadTexture("resources/textures/container2_specular.png");
-                emissionMap = loadTexture("resources/textures/matrix.jpg");
+                stbi_set_flip_vertically_on_load(true);
+                backpackScene = std::make_unique<Model>("resources/models/backpack/backpack.obj");
         }
         
         unsigned int loadTexture(char const* path) {
@@ -306,43 +308,43 @@ private:
 
                 // actual rendering and uniform  buffers
                 shader->use();
-                shader->setVec3("viewPos", camera.Position);
+                // shader->setVec3("viewPos", camera.Position);
 
+                /** Turn off the lights for now but will add a toggle using ImGUI */
                 // directional light
-                shader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
-                shader->setVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
-                shader->setVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
-                shader->setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
+                // shader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
+                // shader->setVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
+                // shader->setVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
+                // shader->setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
 
-                for (int i = 0; i < pointLights.size(); i++)
-                {
-                std::string index = "pointLights[" + std::to_string(i) + "]";
+                // for (int i = 0; i < pointLights.size(); i++)
+                // {
+                //         std::string index = "pointLights[" + std::to_string(i) + "]";
 
-                        shader->setVec3(index + ".position",  pointLights[i].position);
-                        shader->setVec3(index + ".ambient",   pointLights[i].ambient);
-                        shader->setVec3(index + ".diffuse",   pointLights[i].diffuse);
-                        shader->setVec3(index + ".specular",  pointLights[i].specular);
-                        shader->setFloat(index + ".constant", pointLights[i].constant);
-                        shader->setFloat(index + ".linear",   pointLights[i].linear);
-                        shader->setFloat(index + ".quadratic",pointLights[i].quadratic);
-                }
+                //         shader->setVec3(index + ".position",  pointLights[i].position);
+                //         shader->setVec3(index + ".ambient",   pointLights[i].ambient);
+                //         shader->setVec3(index + ".diffuse",   pointLights[i].diffuse);
+                //         shader->setVec3(index + ".specular",  pointLights[i].specular);
+                //         shader->setFloat(index + ".constant", pointLights[i].constant);
+                //         shader->setFloat(index + ".linear",   pointLights[i].linear);
+                //         shader->setFloat(index + ".quadratic",pointLights[i].quadratic);
+                // }
 
                 // spotLight
-                shader->setVec3("spotLight.position", camera.Position);
-                shader->setVec3("spotLight.direction", camera.Front);
-                shader->setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
-                shader->setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
-                shader->setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
-                shader->setFloat("spotLight.constant", 1.0f);
-                shader->setFloat("spotLight.linear", 0.09f);
-                shader->setFloat("spotLight.quadratic", 0.032f);
-                shader->setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-                shader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
+                // shader->setVec3("spotLight.position", camera.Position);
+                // shader->setVec3("spotLight.direction", camera.Front);
+                // shader->setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
+                // shader->setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
+                // shader->setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
+                // shader->setFloat("spotLight.constant", 1.0f);
+                // shader->setFloat("spotLight.linear", 0.09f);
+                // shader->setFloat("spotLight.quadratic", 0.032f);
+                // shader->setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+                // shader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
 
                 // material properties
-                shader->setFloat("material.shininess", 64.0f);
+                // shader->setFloat("material.shininess", 64.0f);
                 shader->setFloat("time", glfwGetTime());
-
 
                 glm::mat4 projection = glm::perspective(
                         glm::radians(camera.Zoom),
@@ -358,43 +360,48 @@ private:
                 shader->setMat4("view", view);
 
                 glm::mat4 model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f)); // translate it down so it's at the center of the scene
+                model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));	// it's a bit too big for our scene, so scale it down
                 shader->setMat4("model", model);
+                shader->setMat4("model", model);
+                backpackScene->Draw(*shader);
 
                   // bind diffuse map
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, diffuseMap);
+                // glActiveTexture(GL_TEXTURE0);
+                // glBindTexture(GL_TEXTURE_2D, diffuseMap);
 
-                glActiveTexture(GL_TEXTURE1);
-                glBindTexture(GL_TEXTURE_2D, specularMap);
+                // glActiveTexture(GL_TEXTURE1);
+                // glBindTexture(GL_TEXTURE_2D, specularMap);
 
-                glActiveTexture(GL_TEXTURE2);
-                glBindTexture(GL_TEXTURE_2D, emissionMap);
+                // glActiveTexture(GL_TEXTURE2);
+                // glBindTexture(GL_TEXTURE_2D, emissionMap);
 
-                glBindVertexArray(cubeVAO);
-                for(unsigned int i = 0; i < 10; i++)
-                {
-                        glm::mat4 model = glm::mat4(1.0f);
-                        model = glm::translate(model, cubePositions[i]);
-                        float angle = 20.0f * i;
-                        model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-                        shader->setMat4("model", model);
+                // glBindVertexArray(cubeVAO);
+                // for(unsigned int i = 0; i < 10; i++)
+                // {
+                //         glm::mat4 model = glm::mat4(1.0f);
+                //         model = glm::translate(model, cubePositions[i]);
+                //         float angle = 20.0f * i;
+                //         model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+                //         shader->setMat4("model", model);
 
-                        glDrawArrays(GL_TRIANGLES, 0, 36);
-                }
-                lightCubeShader->use();
-                lightCubeShader->setMat4("projection", projection);
-                lightCubeShader->setMat4("view", view);
+                //         glDrawArrays(GL_TRIANGLES, 0, 36);
+                // }
 
-                glBindVertexArray(lightVAO);
-                for (size_t i = 0; i < pointLights.size(); i++) {
-                        model = glm::mat4(1.0f);
-                        model = glm::translate(model, pointLightPositions[i]);
-                        model = glm::scale(model, glm::vec3(0.2f));
+                // lightCubeShader->use();
+                // lightCubeShader->setMat4("projection", projection);
+                // lightCubeShader->setMat4("view", view);
 
-                        lightCubeShader->setMat4("model", model);
+                // glBindVertexArray(lightVAO);
+                // for (size_t i = 0; i < pointLights.size(); i++) {
+                //         model = glm::mat4(1.0f);
+                //         model = glm::translate(model, pointLightPositions[i]);
+                //         model = glm::scale(model, glm::vec3(0.2f));
 
-                        glDrawArrays(GL_TRIANGLES, 0, 36);
-                }
+                //         lightCubeShader->setMat4("model", model);
+
+                //         glDrawArrays(GL_TRIANGLES, 0, 36);
+                // }
         }
 public:
 
@@ -404,7 +411,8 @@ public:
                         throw std::runtime_error("Window creation Failed!\n");
                 }
 
-                setupBuffers();
+                // setupBuffers();
+
                 loadAssets();
                 
                 wireframe = false;
@@ -414,20 +422,20 @@ public:
                 shader->use();
                 shader->setInt("material.diffuse", 0);
                 shader->setInt("material.specular", 1);
-                shader->setInt("material.emission", 2);
+                // shader->setInt("material.emission", 2);
 
-                shader->setBool("useEmission", emissionEnabled);
-                for (int i = 0; i < NR_POINT_LIGHTS; i++) {
-                        pointLights.push_back({
-                                pointLightPositions[i],
-                                {0.05f, 0.05f, 0.05f},
-                                {0.8f, 0.8f, 0.8f},
-                                {1.0f, 1.0f, 1.0f},
-                                1.0f,
-                                0.09f,
-                                0.032f
-                        });
-                }
+                // shader->setBool("useEmission", emissionEnabled);
+                // for (int i = 0; i < NR_POINT_LIGHTS; i++) {
+                //         pointLights.push_back({
+                //                 pointLightPositions[i],
+                //                 {0.05f, 0.05f, 0.05f},
+                //                 {0.8f, 0.8f, 0.8f},
+                //                 {1.0f, 1.0f, 1.0f},
+                //                 1.0f,
+                //                 0.09f,
+                //                 0.032f
+                //         });
+                // }
         }
 
         void clear() {

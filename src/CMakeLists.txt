@@ -3,6 +3,7 @@ set(SOURCES
         main.cpp
         glad.c
         shader.cpp
+        model.cpp
         stb_image.c
 )
 
@@ -36,4 +37,8 @@ copy_resources(app
 copy_resources(app
     "${CMAKE_SOURCE_DIR}/resources"
     "resources"
+)
+
+copy_dlls(app
+    "${ASSIMP_ROOT}/bin/libassimp-6.dll"
 )

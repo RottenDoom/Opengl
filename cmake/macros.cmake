@@ -25,3 +25,15 @@ macro(copy_resources TARGET_NAME SRC_DIR DEST_SUBDIR)
         COMMENT "Copying ${SRC_DIR} to $<TARGET_FILE_DIR:${TARGET_NAME}>/${DEST_SUBDIR}"
     )
 endmacro()
+
+macro(copy_dlls TARGET_NAME)
+    foreach(DLL_FILE ${ARGN})
+        add_custom_command(
+            TARGET ${TARGET_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${DLL_FILE}"
+                "$<TARGET_FILE_DIR:${TARGET_NAME}>"
+            COMMENT "Copying DLL: ${DLL_FILE} → $<TARGET_FILE_DIR:${TARGET_NAME}>"
+        )
+    endforeach()
+endmacro()

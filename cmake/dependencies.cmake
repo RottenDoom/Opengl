@@ -2,7 +2,6 @@ include(FetchContent)
 
 # Option: use system GLFW if available, otherwise fallback to bundled
 option(USE_SYSTEM_GLFW "Use system-installed GLFW if available" ON)
-option(USE_SYSTEM_ASSIMP "Use system-installed ASSIMP if available" ON)
 
 if (USE_SYSTEM_GLFW)
     find_package(glfw3 QUIET)
@@ -19,18 +18,16 @@ set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-if (USE_SYSTEM_ASSIMP)
-    find_package(assimp QUIET)
-endif()
+set(ASSIMP_ROOT "${CMAKE_SOURCE_DIR}/external/assimp")
+set(BUILD_ASSIMP_SHARED "Build the assimp library as shared" ON) # might add static or dynamic linking using the third-party submodule later.
 
-if (assimp_FOUND)
-    message(STATUS "Using system-installed Assimp")
-else()
-    message(STATUS "Using bundled Assimp (thirdparty/assimp)")
-    add_subdirectory(thirdparty/assimp)
-endif()
+add_library(assimp SHARED IMPORTED)
 
-set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set_target_properties(assimp PROPERTIES
+    IMPORTED_LOCATION             "${ASSIMP_ROOT}/bin/libassimp-6.dll"
+    IMPORTED_IMPLIB               "${ASSIMP_ROOT}/lib/libassimp.dll.a"
+    INTERFACE_INCLUDE_DIRECTORIES "${ASSIMP_ROOT}/include"
+)
 
 # GLM
 FetchContent_Declare(
@@ -54,4 +51,5 @@ target_include_directories(dependencies
     INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glad/include
+        ${ASSIMP_ROOT}/include
 )
