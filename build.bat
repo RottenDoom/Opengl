@@ -7,7 +7,7 @@ REM Engine
 IF NOT EXIST build (mkdir build)
 
 PUSHD build
-make
+make -j8
 POPD
 IF %ERRORLEVEL% NEQ 0 (echo Error:%ERRORLEVEL% && PAUSE)
 ECHO "All assemblies built successfully."
