@@ -90,6 +90,51 @@ float vertices[] = {
 //         1, 2, 3  // second triangle
 // };
 
+float skyboxVertices[] = {
+        // positions          
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        -1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f
+    };
+
 Camera camera{glm::vec3(0.0f, 0.0f, 3.0f)};
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
@@ -114,8 +159,13 @@ private:
         uint32_t VBO, VAO, EBO, cubeVAO;
         uint32_t texture;
         uint32_t lightVAO;
-        std::unique_ptr<Shader> shader;
-        std::unique_ptr<Shader> lightCubeShader;
+        uint32_t cubeMapTexture;
+        uint32_t skyboxVAO, skyboxVBO;
+
+        std::unique_ptr<Shader> modelShader;
+        std::unique_ptr<Shader> cubeShader;
+        std::unique_ptr<Shader> lightShader;
+        std::unique_ptr<Shader> cubeMapShader;
 
         std::unique_ptr<Model> backpackScene;
 
@@ -167,14 +217,60 @@ private:
         }
 
         void createShader() {
-                shader = std::make_unique<Shader>("shaders/modelShader.vs", "shaders/modelShader.fs");
-                lightCubeShader = std::make_unique<Shader>("shaders/lightShader.vs", "shaders/lightShader.fs");
+                modelShader = std::make_unique<Shader>("shaders/modelShader.vs", "shaders/modelShader.fs");
+                cubeShader = std::make_unique<Shader>("shaders/shader.vs", "shaders/shader.fs");
+                lightShader = std::make_unique<Shader>("shaders/lightShader.vs", "shaders/lightShader.fs");
+                cubeMapShader = std::make_unique<Shader>("shaders/cubemap.vs", "shaders/cubemap.fs");
         }
 
 
         void loadAssets() {
                 stbi_set_flip_vertically_on_load(true);
                 backpackScene = std::make_unique<Model>("resources/models/backpack/backpack.obj");
+                diffuseMap = loadTexture("resources/textures/container2.png");
+                specularMap = loadTexture("resources/textures/container2_specular.png");
+                emissionMap = loadTexture("resources/textures/matrix.jpg");
+                std::vector<std::string> faces
+                {
+                        "resources/textures/skybox/right.jpg",
+                        "resources/textures/skybox/left.jpg",
+                        "resources/textures/skybox/top.jpg",
+                        "resources/textures/skybox/bottom.jpg",
+                        "resources/textures/skybox/front.jpg",
+                        "resources/textures/skybox/back.jpg"
+                };
+
+                cubeMapTexture = loadCubeMap(faces);
+        }
+
+        unsigned int loadCubeMap(std::vector<std::string> faces) {
+                unsigned int textureID;
+                glGenTextures(1, &textureID);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+                int width, height, nrChannels;
+                stbi_set_flip_vertically_on_load(false);
+                for (unsigned int i = 0; i < faces.size(); i++)
+                {
+                        unsigned char *data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+                        if (data)
+                        {
+                                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+                                stbi_image_free(data);
+                        }
+                        else
+                        {
+                                std::cout << "Cubemap tex failed to load at path: " << faces[i] << std::endl;
+                                stbi_image_free(data);
+                        }
+                }
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+                return textureID;
         }
         
         unsigned int loadTexture(char const* path) {
@@ -240,6 +336,18 @@ private:
                                                                 /** stride */ 
                 glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
                 glEnableVertexAttribArray(0);
+
+                glGenVertexArrays(1, &skyboxVAO);
+                glGenBuffers(1, &skyboxVBO);
+                glBindVertexArray(skyboxVAO);
+                glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+                glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+                glEnableVertexAttribArray(0);
+
+                glBindVertexArray(0);
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+
         }
 
         void wireframeMode() {
@@ -253,9 +361,9 @@ private:
                 // toggle for enabling and desabling emmision map
                 if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
                         emissionEnabled = !emissionEnabled;
-                        if (shader != nullptr) {
-                                shader->use();
-                                shader->setBool("useEmission", emissionEnabled);
+                        if (cubeShader != nullptr) {
+                                cubeShader->use();
+                                cubeShader->setBool("useEmission", emissionEnabled);
                         }
                 }
                 if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -305,47 +413,6 @@ private:
                 glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-
-                // actual rendering and uniform  buffers
-                shader->use();
-                // shader->setVec3("viewPos", camera.Position);
-
-                /** Turn off the lights for now but will add a toggle using ImGUI */
-                // directional light
-                // shader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
-                // shader->setVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
-                // shader->setVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
-                // shader->setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
-
-                // for (int i = 0; i < pointLights.size(); i++)
-                // {
-                //         std::string index = "pointLights[" + std::to_string(i) + "]";
-
-                //         shader->setVec3(index + ".position",  pointLights[i].position);
-                //         shader->setVec3(index + ".ambient",   pointLights[i].ambient);
-                //         shader->setVec3(index + ".diffuse",   pointLights[i].diffuse);
-                //         shader->setVec3(index + ".specular",  pointLights[i].specular);
-                //         shader->setFloat(index + ".constant", pointLights[i].constant);
-                //         shader->setFloat(index + ".linear",   pointLights[i].linear);
-                //         shader->setFloat(index + ".quadratic",pointLights[i].quadratic);
-                // }
-
-                // spotLight
-                // shader->setVec3("spotLight.position", camera.Position);
-                // shader->setVec3("spotLight.direction", camera.Front);
-                // shader->setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
-                // shader->setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
-                // shader->setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
-                // shader->setFloat("spotLight.constant", 1.0f);
-                // shader->setFloat("spotLight.linear", 0.09f);
-                // shader->setFloat("spotLight.quadratic", 0.032f);
-                // shader->setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-                // shader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
-
-                // material properties
-                // shader->setFloat("material.shininess", 64.0f);
-                shader->setFloat("time", glfwGetTime());
-
                 glm::mat4 projection = glm::perspective(
                         glm::radians(camera.Zoom),
                         (float)SCR_WIDTH / (float)SCR_HEIGHT, 
@@ -353,55 +420,131 @@ private:
                         100.0f
                 );
 
-
                 glm::mat4 view = camera.GetViewMatrix();
 
-                shader->setMat4("projection", projection);
-                shader->setMat4("view", view);
+                // actual rendering and uniform  buffers
+                cubeShader->use();
+                cubeShader->setVec3("viewPos", camera.Position);
+                cubeShader->setMat4("projection", projection);
+                cubeShader->setMat4("view", view);
+
+                // material properties
+                cubeShader->setFloat("material.shininess", 64.0f);
+                cubeShader->setFloat("time", glfwGetTime());
+
+                /** Turn off the lights for now but will add a toggle using ImGUI */
+                // directional light
+                cubeShader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
+                cubeShader->setVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
+                cubeShader->setVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
+                cubeShader->setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
+                // point light 1
+                cubeShader->setVec3("pointLights[0].position", pointLightPositions[0]);
+                cubeShader->setVec3("pointLights[0].ambient", 0.05f, 0.05f, 0.05f);
+                cubeShader->setVec3("pointLights[0].diffuse", 0.8f, 0.8f, 0.8f);
+                cubeShader->setVec3("pointLights[0].specular", 1.0f, 1.0f, 1.0f);
+                cubeShader->setFloat("pointLights[0].constant", 1.0f);
+                cubeShader->setFloat("pointLights[0].linear", 0.09f);
+                cubeShader->setFloat("pointLights[0].quadratic", 0.032f);
+                // point light 2
+                cubeShader->setVec3("pointLights[1].position", pointLightPositions[1]);
+                cubeShader->setVec3("pointLights[1].ambient", 0.05f, 0.05f, 0.05f);
+                cubeShader->setVec3("pointLights[1].diffuse", 0.8f, 0.8f, 0.8f);
+                cubeShader->setVec3("pointLights[1].specular", 1.0f, 1.0f, 1.0f);
+                cubeShader->setFloat("pointLights[1].constant", 1.0f);
+                cubeShader->setFloat("pointLights[1].linear", 0.09f);
+                cubeShader->setFloat("pointLights[1].quadratic", 0.032f);
+                // point light 3
+                cubeShader->setVec3("pointLights[2].position", pointLightPositions[2]);
+                cubeShader->setVec3("pointLights[2].ambient", 0.05f, 0.05f, 0.05f);
+                cubeShader->setVec3("pointLights[2].diffuse", 0.8f, 0.8f, 0.8f);
+                cubeShader->setVec3("pointLights[2].specular", 1.0f, 1.0f, 1.0f);
+                cubeShader->setFloat("pointLights[2].constant", 1.0f);
+                cubeShader->setFloat("pointLights[2].linear", 0.09f);
+                cubeShader->setFloat("pointLights[2].quadratic", 0.032f);
+                // point light 4
+                cubeShader->setVec3("pointLights[3].position", pointLightPositions[3]);
+                cubeShader->setVec3("pointLights[3].ambient", 0.05f, 0.05f, 0.05f);
+                cubeShader->setVec3("pointLights[3].diffuse", 0.8f, 0.8f, 0.8f);
+                cubeShader->setVec3("pointLights[3].specular", 1.0f, 1.0f, 1.0f);
+                cubeShader->setFloat("pointLights[3].constant", 1.0f);
+                cubeShader->setFloat("pointLights[3].linear", 0.09f);
+                cubeShader->setFloat("pointLights[3].quadratic", 0.032f);
+                // spotLight
+                cubeShader->setVec3("spotLight.position", camera.Position);
+                cubeShader->setVec3("spotLight.direction", camera.Front);
+                cubeShader->setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
+                cubeShader->setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
+                cubeShader->setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
+                cubeShader->setFloat("spotLight.constant", 1.0f);
+                cubeShader->setFloat("spotLight.linear", 0.09f);
+                cubeShader->setFloat("spotLight.quadratic", 0.032f);
+                cubeShader->setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+                cubeShader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
+
+                // bind diffuse map
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, diffuseMap);
+
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, specularMap);
+
+                glActiveTexture(GL_TEXTURE2);
+                glBindTexture(GL_TEXTURE_2D, emissionMap);
+
+                glBindVertexArray(cubeVAO);
+                for(unsigned int i = 0; i < 10; i++)
+                {
+                        glm::mat4 model = glm::mat4(1.0f);
+                        model = glm::translate(model, cubePositions[i]);
+                        float angle = 20.0f * i;
+                        model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+                        cubeShader->setMat4("model", model);
+
+                        glDrawArrays(GL_TRIANGLES, 0, 36);
+                }
+
+                lightShader->use();
+                lightShader->setMat4("projection", projection);
+                lightShader->setMat4("view", view);
+
+                glBindVertexArray(lightVAO);
+                for (size_t i = 0; i < 4; i++) {
+                        glm::mat4 model = glm::mat4(1.0f);
+                        model = glm::translate(model, pointLightPositions[i]);
+                        model = glm::scale(model, glm::vec3(0.2f));
+
+                        lightShader->setMat4("model", model);
+
+                        glDrawArrays(GL_TRIANGLES, 0, 36);
+                }
+                modelShader->use();
+                modelShader->setMat4("view", view);
+                modelShader->setMat4("projection", projection);
+                modelShader->setVec3("viewPos", camera.Position);
 
                 glm::mat4 model = glm::mat4(1.0f);
-                model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f)); // translate it down so it's at the center of the scene
-                model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));	// it's a bit too big for our scene, so scale it down
-                shader->setMat4("model", model);
-                shader->setMat4("model", model);
-                backpackScene->Draw(*shader);
+                model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
+                model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
+                modelShader->setMat4("model", model);
+                backpackScene->Draw(*modelShader);
+                
+                
 
-                  // bind diffuse map
-                // glActiveTexture(GL_TEXTURE0);
-                // glBindTexture(GL_TEXTURE_2D, diffuseMap);
+                glDepthFunc(GL_LEQUAL);
+                cubeMapShader->use();
+                cubeMapShader->setMat4("view", glm::mat4(glm::mat3(view)));
+                cubeMapShader->setMat4("projection", projection);
+                
+                // skybox cube
+                glBindVertexArray(skyboxVAO);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+                glBindVertexArray(0);
 
-                // glActiveTexture(GL_TEXTURE1);
-                // glBindTexture(GL_TEXTURE_2D, specularMap);
-
-                // glActiveTexture(GL_TEXTURE2);
-                // glBindTexture(GL_TEXTURE_2D, emissionMap);
-
-                // glBindVertexArray(cubeVAO);
-                // for(unsigned int i = 0; i < 10; i++)
-                // {
-                //         glm::mat4 model = glm::mat4(1.0f);
-                //         model = glm::translate(model, cubePositions[i]);
-                //         float angle = 20.0f * i;
-                //         model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-                //         shader->setMat4("model", model);
-
-                //         glDrawArrays(GL_TRIANGLES, 0, 36);
-                // }
-
-                // lightCubeShader->use();
-                // lightCubeShader->setMat4("projection", projection);
-                // lightCubeShader->setMat4("view", view);
-
-                // glBindVertexArray(lightVAO);
-                // for (size_t i = 0; i < pointLights.size(); i++) {
-                //         model = glm::mat4(1.0f);
-                //         model = glm::translate(model, pointLightPositions[i]);
-                //         model = glm::scale(model, glm::vec3(0.2f));
-
-                //         lightCubeShader->setMat4("model", model);
-
-                //         glDrawArrays(GL_TRIANGLES, 0, 36);
-                // }
+                // Restore depth state for the next frame
+                glDepthFunc(GL_LESS);
         }
 public:
 
@@ -411,20 +554,21 @@ public:
                         throw std::runtime_error("Window creation Failed!\n");
                 }
 
-                // setupBuffers();
-
+                setupBuffers();
                 loadAssets();
                 
                 wireframe = false;
-                wireframeMode();
+                // wireframeMode();
                 createShader();
 
-                shader->use();
-                shader->setInt("material.diffuse", 0);
-                shader->setInt("material.specular", 1);
-                // shader->setInt("material.emission", 2);
+                cubeShader->use();
+                cubeShader->setInt("material.diffuse", 0);
+                cubeShader->setInt("material.specular", 1);
+                cubeShader->setInt("material.emission", 2);
+                cubeShader->setBool("useEmission", emissionEnabled);
 
-                // shader->setBool("useEmission", emissionEnabled);
+                cubeMapShader->use();
+                cubeMapShader->setInt("skybox", 0);
                 // for (int i = 0; i < NR_POINT_LIGHTS; i++) {
                 //         pointLights.push_back({
                 //                 pointLightPositions[i],
@@ -440,8 +584,10 @@ public:
 
         void clear() {
                 glDeleteVertexArrays(1, &cubeVAO);
+                glDeleteVertexArrays(1, &skyboxVAO);
                 glDeleteVertexArrays(1, &lightVAO);
                 glDeleteBuffers(1, &VBO);
+                glDeleteBuffers(1, &skyboxVBO);
         }
 
         void run() {
