@@ -4,6 +4,7 @@ set(SOURCES
         glad.c
         shader.cpp
         model.cpp
+        logger.cpp
         stb_image.c
 )
 

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <exception>
 #include <vector>
+#include <chrono>
 #include <memory>
 
 #include <glad/glad.h>
@@ -13,6 +14,7 @@
 #include "camera.h"
 #include "shader.h"
 #include "model.h"
+#include "logger.h"
 
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
@@ -151,10 +153,42 @@ struct PointLight {
     float quadratic;
 };
 
+class Timer
+{
+public:
+        using clock = std::chrono::steady_clock;
+
+        void BeginFrame()
+        {
+                auto now = clock::now();
+
+                m_DeltaTime =
+                std::chrono::duration<float>(now - m_LastFrame).count();
+
+                m_LastFrame = now;
+        }
+
+        float GetDeltaTime() const
+        {
+                return m_DeltaTime;
+        }
+
+        float GetFPS() const
+        {
+                return 1.0f / m_DeltaTime;
+        }
+
+private:
+        std::chrono::time_point<clock> m_LastFrame = clock::now();
+        float m_DeltaTime = 0.0f;
+};
+
+
 class App
 {
 private:
         GLFWwindow* window;
+        Timer timer;
 
         uint32_t VBO, VAO, EBO, cubeVAO;
         uint32_t texture;
@@ -177,9 +211,6 @@ private:
 
         glm::vec3 lightPos{1.2f, 1.0f, 2.0f};
 
-        float deltaTime = 0.0f;
-        float lastFrame = 0.0f;
-
         int texwidth, texheight, texnrChannels;
 
         bool wireframe = false;
@@ -196,7 +227,7 @@ private:
                 window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
                 if (window == NULL)
                 {
-                        std::cout << "Failed to create GLFW window" << std::endl;
+                        Logger::Fatal("Failed to create GLFW window");
                         glfwTerminate();
                         return false;
                 }
@@ -208,16 +239,19 @@ private:
 
                 if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
                 {
-                        std::cout << "Failed to initialize GLAD" << std::endl;
+                        Logger::Fatal("Failed to initialize GLAD");
                         return false;
                 }
                 
-                glEnable(GL_DEPTH_TEST);
                 return true;
         }
 
+        void enableFeatures() {
+                glEnable(GL_DEPTH_TEST);
+        }
+
         void createShader() {
-                modelShader = std::make_unique<Shader>("shaders/modelShader.vs", "shaders/modelShader.fs");
+                // modelShader = std::make_unique<Shader>("shaders/modelShader.vs", "shaders/modelShader.fs");
                 cubeShader = std::make_unique<Shader>("shaders/shader.vs", "shaders/shader.fs");
                 lightShader = std::make_unique<Shader>("shaders/lightShader.vs", "shaders/lightShader.fs");
                 cubeMapShader = std::make_unique<Shader>("shaders/cubemap.vs", "shaders/cubemap.fs");
@@ -226,7 +260,7 @@ private:
 
         void loadAssets() {
                 stbi_set_flip_vertically_on_load(true);
-                backpackScene = std::make_unique<Model>("resources/models/backpack/backpack.obj");
+                // backpackScene = std::make_unique<Model>("resources/models/backpack/backpack.obj");
                 diffuseMap = loadTexture("resources/textures/container2.png");
                 specularMap = loadTexture("resources/textures/container2_specular.png");
                 emissionMap = loadTexture("resources/textures/matrix.jpg");
@@ -260,7 +294,7 @@ private:
                         }
                         else
                         {
-                                std::cout << "Cubemap tex failed to load at path: " << faces[i] << std::endl;
+                                Logger::Error("Cubemap tex failed to load at path: {}", faces[i]);
                                 stbi_image_free(data);
                         }
                 }
@@ -281,6 +315,7 @@ private:
 
                 if (!data) {
                         std::string msg = std::string("Failed to load image: ") + path;
+                        Logger::Error(msg);
                         throw std::runtime_error(msg);
                 }
 
@@ -356,7 +391,7 @@ private:
                 }
         }
 
-        void processInput()
+        void processInput(float deltaTime)
         {
                 // toggle for enabling and desabling emmision map
                 if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
@@ -518,16 +553,18 @@ private:
 
                         glDrawArrays(GL_TRIANGLES, 0, 36);
                 }
-                modelShader->use();
-                modelShader->setMat4("view", view);
-                modelShader->setMat4("projection", projection);
-                modelShader->setVec3("viewPos", camera.Position);
 
-                glm::mat4 model = glm::mat4(1.0f);
-                model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
-                model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
-                modelShader->setMat4("model", model);
-                backpackScene->Draw(*modelShader);
+                /** TODO: use model later with animation and things like that*/
+                // modelShader->use();
+                // modelShader->setMat4("view", view);
+                // modelShader->setMat4("projection", projection);
+                // modelShader->setVec3("viewPos", camera.Position);
+
+                // glm::mat4 model = glm::mat4(1.0f);
+                // model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
+                // model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
+                // modelShader->setMat4("model", model);
+                // backpackScene->Draw(*modelShader);
                 
                 
 
@@ -544,16 +581,18 @@ private:
                 glBindVertexArray(0);
 
                 // Restore depth state for the next frame
-                glDepthFunc(GL_LESS);
+                glDepthFunc(GL_LESS); // GL_LESS
         }
 public:
 
         void init() {
+                Logger::Init();
                 inititializeOpenGL();
                 if (!initWindow()) {
                         throw std::runtime_error("Window creation Failed!\n");
                 }
 
+                enableFeatures();
                 setupBuffers();
                 loadAssets();
                 
@@ -593,11 +632,13 @@ public:
         void run() {
                 while(!glfwWindowShouldClose(window))
                 {
-                        float currentFrame = static_cast<float>(glfwGetTime());
-                        deltaTime = currentFrame - lastFrame;
-                        lastFrame = currentFrame;
+                        timer.BeginFrame();
+                        float dt = timer.GetDeltaTime();
+                        float fps = timer.GetFPS();
 
-                        processInput();
+                        processInput(dt);
+
+                        Logger::Info("dt: {:.4f} ms | fps: {:.2f}", dt * 1000.0f, fps);
 
                         render();
 

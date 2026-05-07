@@ -38,6 +38,9 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(glm)
 
+# FMT
+add_subdirectory(thirdparty/fmt)
+
 add_library(dependencies INTERFACE)
 
 target_link_libraries(dependencies
@@ -45,6 +48,7 @@ target_link_libraries(dependencies
         glfw
         glm
         assimp
+        fmt::fmt
 )
 
 target_include_directories(dependencies
