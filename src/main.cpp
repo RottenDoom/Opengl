@@ -205,9 +205,12 @@ private:
 
         // std::vector<PointLight> pointLights;
 
+        /// Uniform Declarations
         unsigned int diffuseMap;
         unsigned int specularMap;
         unsigned int emissionMap;
+        glm::mat4 projection;
+        glm::mat4 view;
 
         glm::vec3 lightPos{1.2f, 1.0f, 2.0f};
 
@@ -248,6 +251,7 @@ private:
 
         void enableFeatures() {
                 glEnable(GL_DEPTH_TEST);
+                glEnable(GL_STENCIL_TEST);
         }
 
         void createShader() {
@@ -444,19 +448,8 @@ private:
                 camera.ProcessMouseScroll(static_cast<float>(yoffset));
         }
 
-        void render() {
-                glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-                glm::mat4 projection = glm::perspective(
-                        glm::radians(camera.Zoom),
-                        (float)SCR_WIDTH / (float)SCR_HEIGHT, 
-                        0.1f,
-                        100.0f
-                );
-
-                glm::mat4 view = camera.GetViewMatrix();
-
+        /** @brief Draw the cubes example from learnopengl.com */
+        void drawCubes() {
                 // actual rendering and uniform  buffers
                 cubeShader->use();
                 cubeShader->setVec3("viewPos", camera.Position);
@@ -538,6 +531,10 @@ private:
 
                         glDrawArrays(GL_TRIANGLES, 0, 36);
                 }
+        }
+
+        /** @brief Draw point lights for testing lighting */
+        void drawPointLights() {
 
                 lightShader->use();
                 lightShader->setMat4("projection", projection);
@@ -553,21 +550,22 @@ private:
 
                         glDrawArrays(GL_TRIANGLES, 0, 36);
                 }
+        }
 
-                /** TODO: use model later with animation and things like that*/
-                // modelShader->use();
-                // modelShader->setMat4("view", view);
-                // modelShader->setMat4("projection", projection);
-                // modelShader->setVec3("viewPos", camera.Position);
+        void drawModel(Model* scene) {
+                modelShader->use();
+                modelShader->setMat4("view", view);
+                modelShader->setMat4("projection", projection);
+                modelShader->setVec3("viewPos", camera.Position);
 
-                // glm::mat4 model = glm::mat4(1.0f);
-                // model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
-                // model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
-                // modelShader->setMat4("model", model);
-                // backpackScene->Draw(*modelShader);
-                
-                
+                glm::mat4 model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
+                model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
+                modelShader->setMat4("model", model);
+                scene->Draw(*modelShader);
+        }
 
+        void drawCubeMap() {
                 glDepthFunc(GL_LEQUAL);
                 cubeMapShader->use();
                 cubeMapShader->setMat4("view", glm::mat4(glm::mat3(view)));
@@ -582,6 +580,25 @@ private:
 
                 // Restore depth state for the next frame
                 glDepthFunc(GL_LESS); // GL_LESS
+        }
+
+        void render() {
+                glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+                projection = glm::perspective(
+                        glm::radians(camera.Zoom),
+                        (float)SCR_WIDTH / (float)SCR_HEIGHT, 
+                        0.1f,
+                        100.0f
+                );
+
+                view = camera.GetViewMatrix();
+
+                drawCubes();
+                drawPointLights();
+                // drawModel(backpackScene.get());                
+                drawCubeMap();
         }
 public:
 
@@ -638,7 +655,7 @@ public:
 
                         processInput(dt);
 
-                        Logger::Info("dt: {:.4f} ms | fps: {:.2f}", dt * 1000.0f, fps);
+                        // Logger::Info("dt: {:.4f} ms | fps: {:.2f}", dt * 1000.0f, fps);
 
                         render();
 
