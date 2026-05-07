@@ -511,61 +511,48 @@ private:
                 camera.ProcessMouseScroll(static_cast<float>(yoffset));
         }
 
+        /** @brief Function for holding lighting uniforms */
+        void drawLightUniforms(Shader* shader) {
+                shader->use();
+                shader->setVec3("viewPos", camera.Position);
+                shader->setMat4("projection", projection);
+                shader->setMat4("view", view);
+                shader->setFloat("material.shininess", 64.0f);
+                shader->setFloat("time", (float)glfwGetTime());
+
+                shader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
+                shader->setVec3("dirLight.ambient",    0.05f, 0.05f, 0.05f);
+                shader->setVec3("dirLight.diffuse",    0.4f,  0.4f,  0.4f);
+                shader->setVec3("dirLight.specular",   0.5f,  0.5f,  0.5f);
+
+
+                for (int i = 0; i < 4; i++) {
+                        std::string base = "pointLights[" + std::to_string(i) + "].";
+                        shader->setVec3((base + "position").c_str(),  pointLightPositions[i]);
+                        shader->setVec3((base + "ambient").c_str(),   0.05f, 0.05f, 0.05f);
+                        shader->setVec3((base + "diffuse").c_str(),   0.8f,  0.8f,  0.8f);
+                        shader->setVec3((base + "specular").c_str(),  1.0f,  1.0f,  1.0f);
+                        shader->setFloat((base + "constant").c_str(),  1.0f);
+                        shader->setFloat((base + "linear").c_str(),    0.09f);
+                        shader->setFloat((base + "quadratic").c_str(), 0.032f);
+                }
+
+                shader->setVec3("spotLight.position",   camera.Position);
+                shader->setVec3("spotLight.direction",  camera.Front);
+                shader->setVec3("spotLight.ambient",    0.0f, 0.0f, 0.0f);
+                shader->setVec3("spotLight.diffuse",    1.0f, 1.0f, 1.0f);
+                shader->setVec3("spotLight.specular",   1.0f, 1.0f, 1.0f);
+                shader->setFloat("spotLight.constant",  1.0f);
+                shader->setFloat("spotLight.linear",    0.09f);
+                shader->setFloat("spotLight.quadratic", 0.032f);
+                shader->setFloat("spotLight.cutOff",    glm::cos(glm::radians(12.5f)));
+                shader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
+        }
+
         /** @brief Draw the cubes example from learnopengl.com */
         void drawCubes(Shader* shader) {
                 // material properties
-                shader->setFloat("material.shininess", 64.0f);
-                shader->setFloat("time", glfwGetTime());
-
-                /** Turn off the lights for now but will add a toggle using ImGUI */
-                // directional light
-                shader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
-                shader->setVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
-                shader->setVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
-                shader->setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
-                // point light 1
-                shader->setVec3("pointLights[0].position", pointLightPositions[0]);
-                shader->setVec3("pointLights[0].ambient", 0.05f, 0.05f, 0.05f);
-                shader->setVec3("pointLights[0].diffuse", 0.8f, 0.8f, 0.8f);
-                shader->setVec3("pointLights[0].specular", 1.0f, 1.0f, 1.0f);
-                shader->setFloat("pointLights[0].constant", 1.0f);
-                shader->setFloat("pointLights[0].linear", 0.09f);
-                shader->setFloat("pointLights[0].quadratic", 0.032f);
-                // point light 2
-                shader->setVec3("pointLights[1].position", pointLightPositions[1]);
-                shader->setVec3("pointLights[1].ambient", 0.05f, 0.05f, 0.05f);
-                shader->setVec3("pointLights[1].diffuse", 0.8f, 0.8f, 0.8f);
-                shader->setVec3("pointLights[1].specular", 1.0f, 1.0f, 1.0f);
-                shader->setFloat("pointLights[1].constant", 1.0f);
-                shader->setFloat("pointLights[1].linear", 0.09f);
-                shader->setFloat("pointLights[1].quadratic", 0.032f);
-                // point light 3
-                shader->setVec3("pointLights[2].position", pointLightPositions[2]);
-                shader->setVec3("pointLights[2].ambient", 0.05f, 0.05f, 0.05f);
-                shader->setVec3("pointLights[2].diffuse", 0.8f, 0.8f, 0.8f);
-                shader->setVec3("pointLights[2].specular", 1.0f, 1.0f, 1.0f);
-                shader->setFloat("pointLights[2].constant", 1.0f);
-                shader->setFloat("pointLights[2].linear", 0.09f);
-                shader->setFloat("pointLights[2].quadratic", 0.032f);
-                // point light 4
-                shader->setVec3("pointLights[3].position", pointLightPositions[3]);
-                shader->setVec3("pointLights[3].ambient", 0.05f, 0.05f, 0.05f);
-                shader->setVec3("pointLights[3].diffuse", 0.8f, 0.8f, 0.8f);
-                shader->setVec3("pointLights[3].specular", 1.0f, 1.0f, 1.0f);
-                shader->setFloat("pointLights[3].constant", 1.0f);
-                shader->setFloat("pointLights[3].linear", 0.09f);
-                shader->setFloat("pointLights[3].quadratic", 0.032f);
-                // spotLight
-                shader->setVec3("spotLight.position", camera.Position);
-                shader->setVec3("spotLight.direction", camera.Front);
-                shader->setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
-                shader->setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
-                shader->setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
-                shader->setFloat("spotLight.constant", 1.0f);
-                shader->setFloat("spotLight.linear", 0.09f);
-                shader->setFloat("spotLight.quadratic", 0.032f);
-                shader->setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-                shader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
+                drawLightUniforms(shader);
 
                 // bind diffuse map /// TODO: these need to be set from the runtime or something
                 glActiveTexture(GL_TEXTURE0);
@@ -737,42 +724,9 @@ private:
                 // draw normal stencil test
                 drawFloor(cubeShader.get());
                 drawPointLights();
-                // drawModel(backpackScene.get());       
+                // drawModel(backpackScene.get());
                 
-                cubeShader->use();
-                cubeShader->setVec3("viewPos", camera.Position);
-                cubeShader->setMat4("projection", projection);
-                cubeShader->setMat4("view", view);
-                cubeShader->setFloat("material.shininess", 64.0f);
-                cubeShader->setFloat("time", (float)glfwGetTime());
-
-                cubeShader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
-                cubeShader->setVec3("dirLight.ambient",    0.05f, 0.05f, 0.05f);
-                cubeShader->setVec3("dirLight.diffuse",    0.4f,  0.4f,  0.4f);
-                cubeShader->setVec3("dirLight.specular",   0.5f,  0.5f,  0.5f);
-
-
-                for (int i = 0; i < 4; i++) {
-                        std::string base = "pointLights[" + std::to_string(i) + "].";
-                        cubeShader->setVec3((base + "position").c_str(),  pointLightPositions[i]);
-                        cubeShader->setVec3((base + "ambient").c_str(),   0.05f, 0.05f, 0.05f);
-                        cubeShader->setVec3((base + "diffuse").c_str(),   0.8f,  0.8f,  0.8f);
-                        cubeShader->setVec3((base + "specular").c_str(),  1.0f,  1.0f,  1.0f);
-                        cubeShader->setFloat((base + "constant").c_str(),  1.0f);
-                        cubeShader->setFloat((base + "linear").c_str(),    0.09f);
-                        cubeShader->setFloat((base + "quadratic").c_str(), 0.032f);
-                }
-
-                cubeShader->setVec3("spotLight.position",   camera.Position);
-                cubeShader->setVec3("spotLight.direction",  camera.Front);
-                cubeShader->setVec3("spotLight.ambient",    0.0f, 0.0f, 0.0f);
-                cubeShader->setVec3("spotLight.diffuse",    1.0f, 1.0f, 1.0f);
-                cubeShader->setVec3("spotLight.specular",   1.0f, 1.0f, 1.0f);
-                cubeShader->setFloat("spotLight.constant",  1.0f);
-                cubeShader->setFloat("spotLight.linear",    0.09f);
-                cubeShader->setFloat("spotLight.quadratic", 0.032f);
-                cubeShader->setFloat("spotLight.cutOff",    glm::cos(glm::radians(12.5f)));
-                cubeShader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
+                drawLightUniforms(cubeShader.get());
 
                 // Bind textures once for all cube draws
                 glActiveTexture(GL_TEXTURE0);
@@ -785,7 +739,7 @@ private:
                 // Outline Draw call
                 model = glm::mat4(1.0f);
                 model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
-                drawWithOutline(cubeShader.get(), cubeVAO, 36, model);
+                drawWithOutline(cubeShader.get(), cubeVAO, 36, model, glm::vec3(1.0f, 0.5f, 0.0f));
 
                 model = glm::mat4(1.0f);
                 model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
