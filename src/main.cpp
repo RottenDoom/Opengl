@@ -87,6 +87,17 @@ float vertices[] = {
     -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 1.0f
 };
 
+float planeVertices[] = {
+    // positions            // normals       // texcoords
+     5.0f, -0.5f,  5.0f,    0,1,0,          2.0f, 0.0f,
+    -5.0f, -0.5f,  5.0f,    0,1,0,          0.0f, 0.0f,
+    -5.0f, -0.5f, -5.0f,    0,1,0,          0.0f, 2.0f,
+
+     5.0f, -0.5f,  5.0f,    0,1,0,          2.0f, 0.0f,
+    -5.0f, -0.5f, -5.0f,    0,1,0,          0.0f, 2.0f,
+     5.0f, -0.5f, -5.0f,    0,1,0,          2.0f, 2.0f
+};
+
 // unsigned int indices[] = {  
 //         0, 1, 3, // first triangle
 //         1, 2, 3  // second triangle
@@ -183,6 +194,14 @@ private:
         float m_DeltaTime = 0.0f;
 };
 
+// Passes and Render Draw Calls
+struct OutlineDrawCall {
+    uint32_t    vao;
+    int         vertexCount;
+    glm::mat4   transform;
+    glm::vec3   color;       // outline tint, passed to stencilShader
+};
+
 
 class App
 {
@@ -191,12 +210,16 @@ private:
         Timer timer;
 
         uint32_t VBO, VAO, EBO, cubeVAO;
-        uint32_t texture;
         uint32_t lightVAO;
-        uint32_t cubeMapTexture;
         uint32_t skyboxVAO, skyboxVBO;
+        uint32_t planeVAO, planeVBO;
+        
+        uint32_t texture;
+        uint32_t cubeMapTexture;
+        uint32_t floorTexture;
 
         std::unique_ptr<Shader> modelShader;
+        std::unique_ptr<Shader> stencilShader;
         std::unique_ptr<Shader> cubeShader;
         std::unique_ptr<Shader> lightShader;
         std::unique_ptr<Shader> cubeMapShader;
@@ -211,6 +234,9 @@ private:
         unsigned int emissionMap;
         glm::mat4 projection;
         glm::mat4 view;
+
+        // RenderPass queues
+        std::vector<OutlineDrawCall> outlineQueue;
 
         glm::vec3 lightPos{1.2f, 1.0f, 2.0f};
 
@@ -251,7 +277,10 @@ private:
 
         void enableFeatures() {
                 glEnable(GL_DEPTH_TEST);
+                glDepthFunc(GL_LESS);
                 glEnable(GL_STENCIL_TEST);
+                glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+                glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
         }
 
         void createShader() {
@@ -259,12 +288,15 @@ private:
                 cubeShader = std::make_unique<Shader>("shaders/shader.vs", "shaders/shader.fs");
                 lightShader = std::make_unique<Shader>("shaders/lightShader.vs", "shaders/lightShader.fs");
                 cubeMapShader = std::make_unique<Shader>("shaders/cubemap.vs", "shaders/cubemap.fs");
+                stencilShader = std::make_unique<Shader>("shaders/stencilShader.vs", "shaders/stencilShader.fs");
         }
 
 
         void loadAssets() {
                 stbi_set_flip_vertically_on_load(true);
                 // backpackScene = std::make_unique<Model>("resources/models/backpack/backpack.obj");
+                floorTexture = loadTexture("resources/textures/metal.png");
+                
                 diffuseMap = loadTexture("resources/textures/container2.png");
                 specularMap = loadTexture("resources/textures/container2_specular.png");
                 emissionMap = loadTexture("resources/textures/matrix.jpg");
@@ -350,42 +382,73 @@ private:
         // split the buffer attributes later.
         void setupBuffers() {
 
-                glGenVertexArrays(1, &cubeVAO);
-                glGenBuffers(1, &VBO);
+                /** CUBE BUFFER */
+                {
+                        glGenVertexArrays(1, &cubeVAO);
+                        glGenBuffers(1, &VBO);
 
-                glBindBuffer(GL_ARRAY_BUFFER, VBO);
-                glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+                        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+                        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-                glBindVertexArray(cubeVAO);
+                        glBindVertexArray(cubeVAO);
 
-                // position attribute
-                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-                glEnableVertexAttribArray(0);
-                // normal attribute
-                glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-                glEnableVertexAttribArray(1);
-                // texcoords vectices
-                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-                glEnableVertexAttribArray(2);
+                        // position attribute
+                        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+                        glEnableVertexAttribArray(0);
+                        // normal attribute
+                        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+                        glEnableVertexAttribArray(1);
+                        // texcoords vectices
+                        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+                        glEnableVertexAttribArray(2);
+                }
 
-                glGenVertexArrays(1, &lightVAO);
-                glBindVertexArray(lightVAO);
+                /** LIGHT CUBE BUFFER */
+                {
 
-                glBindBuffer(GL_ARRAY_BUFFER, VBO);
-                                                                /** stride */ 
-                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-                glEnableVertexAttribArray(0);
+                        glGenVertexArrays(1, &lightVAO);
+                        glBindVertexArray(lightVAO);
+                        
+                        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+                        /** stride */ 
+                        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+                        glEnableVertexAttribArray(0);
+                }
 
-                glGenVertexArrays(1, &skyboxVAO);
-                glGenBuffers(1, &skyboxVBO);
-                glBindVertexArray(skyboxVAO);
-                glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-                glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
-                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-                glEnableVertexAttribArray(0);
+                /** FLOOR BUFFER */
+                {
+                        glGenVertexArrays(1, &planeVAO);
+                        glGenBuffers(1, &planeVBO);
+                        glBindVertexArray(planeVAO);
+                        glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
+                        glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), &planeVertices, GL_STATIC_DRAW);
+                        
+                        glEnableVertexAttribArray(0);
+                        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+                        
+                        glEnableVertexAttribArray(1);
+                        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*) (3 * sizeof(float)));
+                        
+                        glEnableVertexAttribArray(2);
+                        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
 
-                glBindVertexArray(0);
-                glBindBuffer(GL_ARRAY_BUFFER, 0);
+                        glBindVertexArray(0);
+                }
+
+                /** SKYBOX BUFFER */
+                {
+
+                        glGenVertexArrays(1, &skyboxVAO);
+                        glGenBuffers(1, &skyboxVBO);
+                        glBindVertexArray(skyboxVAO);
+                        glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+                        glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+                        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+                        glEnableVertexAttribArray(0);
+                        
+                        glBindVertexArray(0);
+                        glBindBuffer(GL_ARRAY_BUFFER, 0);
+                }
 
         }
 
@@ -449,68 +512,62 @@ private:
         }
 
         /** @brief Draw the cubes example from learnopengl.com */
-        void drawCubes() {
-                // actual rendering and uniform  buffers
-                cubeShader->use();
-                cubeShader->setVec3("viewPos", camera.Position);
-                cubeShader->setMat4("projection", projection);
-                cubeShader->setMat4("view", view);
-
+        void drawCubes(Shader* shader) {
                 // material properties
-                cubeShader->setFloat("material.shininess", 64.0f);
-                cubeShader->setFloat("time", glfwGetTime());
+                shader->setFloat("material.shininess", 64.0f);
+                shader->setFloat("time", glfwGetTime());
 
                 /** Turn off the lights for now but will add a toggle using ImGUI */
                 // directional light
-                cubeShader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
-                cubeShader->setVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
-                cubeShader->setVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
-                cubeShader->setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
+                shader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
+                shader->setVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
+                shader->setVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
+                shader->setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
                 // point light 1
-                cubeShader->setVec3("pointLights[0].position", pointLightPositions[0]);
-                cubeShader->setVec3("pointLights[0].ambient", 0.05f, 0.05f, 0.05f);
-                cubeShader->setVec3("pointLights[0].diffuse", 0.8f, 0.8f, 0.8f);
-                cubeShader->setVec3("pointLights[0].specular", 1.0f, 1.0f, 1.0f);
-                cubeShader->setFloat("pointLights[0].constant", 1.0f);
-                cubeShader->setFloat("pointLights[0].linear", 0.09f);
-                cubeShader->setFloat("pointLights[0].quadratic", 0.032f);
+                shader->setVec3("pointLights[0].position", pointLightPositions[0]);
+                shader->setVec3("pointLights[0].ambient", 0.05f, 0.05f, 0.05f);
+                shader->setVec3("pointLights[0].diffuse", 0.8f, 0.8f, 0.8f);
+                shader->setVec3("pointLights[0].specular", 1.0f, 1.0f, 1.0f);
+                shader->setFloat("pointLights[0].constant", 1.0f);
+                shader->setFloat("pointLights[0].linear", 0.09f);
+                shader->setFloat("pointLights[0].quadratic", 0.032f);
                 // point light 2
-                cubeShader->setVec3("pointLights[1].position", pointLightPositions[1]);
-                cubeShader->setVec3("pointLights[1].ambient", 0.05f, 0.05f, 0.05f);
-                cubeShader->setVec3("pointLights[1].diffuse", 0.8f, 0.8f, 0.8f);
-                cubeShader->setVec3("pointLights[1].specular", 1.0f, 1.0f, 1.0f);
-                cubeShader->setFloat("pointLights[1].constant", 1.0f);
-                cubeShader->setFloat("pointLights[1].linear", 0.09f);
-                cubeShader->setFloat("pointLights[1].quadratic", 0.032f);
+                shader->setVec3("pointLights[1].position", pointLightPositions[1]);
+                shader->setVec3("pointLights[1].ambient", 0.05f, 0.05f, 0.05f);
+                shader->setVec3("pointLights[1].diffuse", 0.8f, 0.8f, 0.8f);
+                shader->setVec3("pointLights[1].specular", 1.0f, 1.0f, 1.0f);
+                shader->setFloat("pointLights[1].constant", 1.0f);
+                shader->setFloat("pointLights[1].linear", 0.09f);
+                shader->setFloat("pointLights[1].quadratic", 0.032f);
                 // point light 3
-                cubeShader->setVec3("pointLights[2].position", pointLightPositions[2]);
-                cubeShader->setVec3("pointLights[2].ambient", 0.05f, 0.05f, 0.05f);
-                cubeShader->setVec3("pointLights[2].diffuse", 0.8f, 0.8f, 0.8f);
-                cubeShader->setVec3("pointLights[2].specular", 1.0f, 1.0f, 1.0f);
-                cubeShader->setFloat("pointLights[2].constant", 1.0f);
-                cubeShader->setFloat("pointLights[2].linear", 0.09f);
-                cubeShader->setFloat("pointLights[2].quadratic", 0.032f);
+                shader->setVec3("pointLights[2].position", pointLightPositions[2]);
+                shader->setVec3("pointLights[2].ambient", 0.05f, 0.05f, 0.05f);
+                shader->setVec3("pointLights[2].diffuse", 0.8f, 0.8f, 0.8f);
+                shader->setVec3("pointLights[2].specular", 1.0f, 1.0f, 1.0f);
+                shader->setFloat("pointLights[2].constant", 1.0f);
+                shader->setFloat("pointLights[2].linear", 0.09f);
+                shader->setFloat("pointLights[2].quadratic", 0.032f);
                 // point light 4
-                cubeShader->setVec3("pointLights[3].position", pointLightPositions[3]);
-                cubeShader->setVec3("pointLights[3].ambient", 0.05f, 0.05f, 0.05f);
-                cubeShader->setVec3("pointLights[3].diffuse", 0.8f, 0.8f, 0.8f);
-                cubeShader->setVec3("pointLights[3].specular", 1.0f, 1.0f, 1.0f);
-                cubeShader->setFloat("pointLights[3].constant", 1.0f);
-                cubeShader->setFloat("pointLights[3].linear", 0.09f);
-                cubeShader->setFloat("pointLights[3].quadratic", 0.032f);
+                shader->setVec3("pointLights[3].position", pointLightPositions[3]);
+                shader->setVec3("pointLights[3].ambient", 0.05f, 0.05f, 0.05f);
+                shader->setVec3("pointLights[3].diffuse", 0.8f, 0.8f, 0.8f);
+                shader->setVec3("pointLights[3].specular", 1.0f, 1.0f, 1.0f);
+                shader->setFloat("pointLights[3].constant", 1.0f);
+                shader->setFloat("pointLights[3].linear", 0.09f);
+                shader->setFloat("pointLights[3].quadratic", 0.032f);
                 // spotLight
-                cubeShader->setVec3("spotLight.position", camera.Position);
-                cubeShader->setVec3("spotLight.direction", camera.Front);
-                cubeShader->setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
-                cubeShader->setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
-                cubeShader->setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
-                cubeShader->setFloat("spotLight.constant", 1.0f);
-                cubeShader->setFloat("spotLight.linear", 0.09f);
-                cubeShader->setFloat("spotLight.quadratic", 0.032f);
-                cubeShader->setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-                cubeShader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
+                shader->setVec3("spotLight.position", camera.Position);
+                shader->setVec3("spotLight.direction", camera.Front);
+                shader->setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
+                shader->setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
+                shader->setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
+                shader->setFloat("spotLight.constant", 1.0f);
+                shader->setFloat("spotLight.linear", 0.09f);
+                shader->setFloat("spotLight.quadratic", 0.032f);
+                shader->setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+                shader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
 
-                // bind diffuse map
+                // bind diffuse map /// TODO: these need to be set from the runtime or something
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, diffuseMap);
 
@@ -521,16 +578,37 @@ private:
                 glBindTexture(GL_TEXTURE_2D, emissionMap);
 
                 glBindVertexArray(cubeVAO);
-                for(unsigned int i = 0; i < 10; i++)
-                {
-                        glm::mat4 model = glm::mat4(1.0f);
-                        model = glm::translate(model, cubePositions[i]);
-                        float angle = 20.0f * i;
-                        model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-                        cubeShader->setMat4("model", model);
 
-                        glDrawArrays(GL_TRIANGLES, 0, 36);
-                }
+                // Drawing only two cubes for now
+                glm::mat4 model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
+                shader->setMat4("model", model);
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+                model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
+                shader->setMat4("model", model);
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+                // for(unsigned int i = 0; i < 10; i++)
+                // {
+                //         glm::mat4 model = glm::mat4(1.0f);
+                //         model = glm::translate(model, cubePositions[i]);
+                //         float angle = 20.0f * i;
+                //         model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+                //         shader->setMat4("model", model);
+
+                //         glDrawArrays(GL_TRIANGLES, 0, 36);
+                // }
+        }
+
+        /** @brief Draw floor for testing */
+        void drawFloor(Shader* shader) {
+                shader->use();
+                glBindVertexArray(planeVAO);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, floorTexture);
+                shader->setMat4("model", glm::mat4(1.0f));
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+                glBindVertexArray(0);
         }
 
         /** @brief Draw point lights for testing lighting */
@@ -581,24 +659,140 @@ private:
                 // Restore depth state for the next frame
                 glDepthFunc(GL_LESS); // GL_LESS
         }
+        
+        /** draw call for outlines */
+        void drawWithOutline(
+                Shader*           shader,
+                uint32_t          vao,
+                int               vertexCount,
+                const glm::mat4&  transform,
+                const glm::vec3&  outlineColor = glm::vec3(1.0f)  // 0.04, 0.28, 0.26
+        ) {
+                // Pass 1: normal draw into stencil
+                glStencilFunc(GL_ALWAYS, 1, 0xFF);
+                glStencilMask(0xFF);
+
+                shader->use();
+                shader->setMat4("model", transform);
+                glBindVertexArray(vao);
+                glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+
+                // Enqueue pass 2
+                outlineQueue.push_back({ vao, vertexCount, transform, outlineColor });
+        }
+
+        // flushes outline draw calls (call this at the end)
+        void flushOutlinePass(float scale = 1.05f) {
+                if (outlineQueue.empty()) return;
+
+                glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+                glStencilMask(0x00);
+                // glDisable(GL_DEPTH_TEST);
+
+                stencilShader->use();
+                stencilShader->setMat4("view", view);
+                stencilShader->setMat4("projection", projection);
+
+                for (const auto& call : outlineQueue) {
+                        glm::mat4 scaledModel = glm::scale(call.transform, glm::vec3(scale));
+
+                        stencilShader->setMat4("model", scaledModel);
+                        stencilShader->setVec3("outlineColor", call.color);  // wire this up in the fs
+
+                        glBindVertexArray(call.vao);
+                        glDrawArrays(GL_TRIANGLES, 0, call.vertexCount);
+                }
+
+                outlineQueue.clear();
+
+                // Restore state
+                glStencilMask(0xFF);
+                glStencilFunc(GL_ALWAYS, 0, 0xFF);
+                // glEnable(GL_DEPTH_TEST);
+        }
 
         void render() {
                 glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
+                glStencilMask(0xFF); // if this is not turned on stencil buffer will not be cleared 
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+                
                 projection = glm::perspective(
                         glm::radians(camera.Zoom),
                         (float)SCR_WIDTH / (float)SCR_HEIGHT, 
                         0.1f,
                         100.0f
                 );
-
+                
                 view = camera.GetViewMatrix();
+                glm::mat4 model = glm::mat4(1.0f);
+                
+                glStencilMask(0x00);
 
-                drawCubes();
+                // TODO: Remove these uniforms later and make this better in its own light shader
+                cubeShader->use();
+                cubeShader->setVec3("viewPos", camera.Position);
+                cubeShader->setMat4("projection", projection);
+                cubeShader->setMat4("view", view);
+                // draw normal stencil test
+                drawFloor(cubeShader.get());
                 drawPointLights();
-                // drawModel(backpackScene.get());                
+                // drawModel(backpackScene.get());       
+                
+                cubeShader->use();
+                cubeShader->setVec3("viewPos", camera.Position);
+                cubeShader->setMat4("projection", projection);
+                cubeShader->setMat4("view", view);
+                cubeShader->setFloat("material.shininess", 64.0f);
+                cubeShader->setFloat("time", (float)glfwGetTime());
+
+                cubeShader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
+                cubeShader->setVec3("dirLight.ambient",    0.05f, 0.05f, 0.05f);
+                cubeShader->setVec3("dirLight.diffuse",    0.4f,  0.4f,  0.4f);
+                cubeShader->setVec3("dirLight.specular",   0.5f,  0.5f,  0.5f);
+
+
+                for (int i = 0; i < 4; i++) {
+                        std::string base = "pointLights[" + std::to_string(i) + "].";
+                        cubeShader->setVec3((base + "position").c_str(),  pointLightPositions[i]);
+                        cubeShader->setVec3((base + "ambient").c_str(),   0.05f, 0.05f, 0.05f);
+                        cubeShader->setVec3((base + "diffuse").c_str(),   0.8f,  0.8f,  0.8f);
+                        cubeShader->setVec3((base + "specular").c_str(),  1.0f,  1.0f,  1.0f);
+                        cubeShader->setFloat((base + "constant").c_str(),  1.0f);
+                        cubeShader->setFloat((base + "linear").c_str(),    0.09f);
+                        cubeShader->setFloat((base + "quadratic").c_str(), 0.032f);
+                }
+
+                cubeShader->setVec3("spotLight.position",   camera.Position);
+                cubeShader->setVec3("spotLight.direction",  camera.Front);
+                cubeShader->setVec3("spotLight.ambient",    0.0f, 0.0f, 0.0f);
+                cubeShader->setVec3("spotLight.diffuse",    1.0f, 1.0f, 1.0f);
+                cubeShader->setVec3("spotLight.specular",   1.0f, 1.0f, 1.0f);
+                cubeShader->setFloat("spotLight.constant",  1.0f);
+                cubeShader->setFloat("spotLight.linear",    0.09f);
+                cubeShader->setFloat("spotLight.quadratic", 0.032f);
+                cubeShader->setFloat("spotLight.cutOff",    glm::cos(glm::radians(12.5f)));
+                cubeShader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
+
+                // Bind textures once for all cube draws
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, diffuseMap);
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, specularMap);
+                glActiveTexture(GL_TEXTURE2);
+                glBindTexture(GL_TEXTURE_2D, emissionMap);
+
+                // Outline Draw call
+                model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
+                drawWithOutline(cubeShader.get(), cubeVAO, 36, model);
+
+                model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
+                drawWithOutline(cubeShader.get(), cubeVAO, 36, model, glm::vec3(1.0f, 0.5f, 0.0f));
+                
                 drawCubeMap();
+                flushOutlinePass(1.05f);       
         }
 public:
 

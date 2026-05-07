@@ -56,3 +56,5 @@ CMakeUserPresets.json
 *.gif
 
 [Bb][Uu][Ii][Ll][Dd]/
+
+.vscode/
