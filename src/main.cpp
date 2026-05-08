@@ -1,3 +1,32 @@
+/*
+ * File: main.cpp
+ * Created: 2026-05-07
+ * Description: Main testing file for all my mixing and matching. I am currently abstracting out the state machine
+* 
+* MIT License
+* 
+* Copyright (c) 2026 Aditya Yadav
+* 
+* Permission is hereby granted, free of charge, to any person obtaining a copy
+* of this software and associated documentation files (the "Software"), to deal
+* in the Software without restriction, including without limitation the rights
+* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+* copies of the Software, and to permit persons to whom the Software is
+* furnished to do so, subject to the following conditions:
+* 
+* The above copyright notice and this permission notice shall be included in all
+* copies or substantial portions of the Software.
+* 
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+* SOFTWARE
+*/
+
+
 #include <iostream>
 #include <exception>
 #include <vector>
@@ -387,10 +416,10 @@ private:
                         glGenVertexArrays(1, &cubeVAO);
                         glGenBuffers(1, &VBO);
 
+                        glBindVertexArray(cubeVAO);
+
                         glBindBuffer(GL_ARRAY_BUFFER, VBO);
                         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-                        glBindVertexArray(cubeVAO);
 
                         // position attribute
                         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
@@ -401,6 +430,8 @@ private:
                         // texcoords vectices
                         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
                         glEnableVertexAttribArray(2);
+
+                        glBindVertexArray(0);
                 }
 
                 /** LIGHT CUBE BUFFER */
@@ -413,6 +444,7 @@ private:
                         /** stride */ 
                         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
                         glEnableVertexAttribArray(0);
+                        glBindVertexArray(0);
                 }
 
                 /** FLOOR BUFFER */
@@ -420,6 +452,7 @@ private:
                         glGenVertexArrays(1, &planeVAO);
                         glGenBuffers(1, &planeVBO);
                         glBindVertexArray(planeVAO);
+
                         glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
                         glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), &planeVertices, GL_STATIC_DRAW);
                         
@@ -441,6 +474,7 @@ private:
                         glGenVertexArrays(1, &skyboxVAO);
                         glGenBuffers(1, &skyboxVBO);
                         glBindVertexArray(skyboxVAO);
+
                         glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
                         glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
                         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
@@ -615,6 +649,7 @@ private:
 
                         glDrawArrays(GL_TRIANGLES, 0, 36);
                 }
+                glBindVertexArray(0);
         }
 
         void drawModel(Model* scene) {
@@ -726,6 +761,7 @@ private:
                 drawPointLights();
                 // drawModel(backpackScene.get());
                 
+                drawCubeMap();
                 drawLightUniforms(cubeShader.get());
 
                 // Bind textures once for all cube draws
@@ -745,7 +781,7 @@ private:
                 model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
                 drawWithOutline(cubeShader.get(), cubeVAO, 36, model, glm::vec3(1.0f, 0.5f, 0.0f));
                 
-                drawCubeMap();
+                
                 flushOutlinePass(1.05f);       
         }
 public:

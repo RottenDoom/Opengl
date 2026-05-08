@@ -32,6 +32,8 @@
 *.a
 *.lib
 
+todo
+
 # Executables
 *.exe
 *.out
