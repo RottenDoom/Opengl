@@ -45,7 +45,6 @@
 #include "shader.h"
 #include "model.h"
 #include "logger.h"
-#include "profiling.h"
 
 // debug callback
 void GLAPIENTRY GLDebugMessageCallback(
@@ -304,7 +303,6 @@ private:
 
         // RenderPass queues
         std::vector<OutlineDrawCall> outlineQueue;
-        std::map<float, glm::vec3> sorted;
 
         glm::vec3 lightPos{1.2f, 1.0f, 2.0f};
 
@@ -625,7 +623,6 @@ private:
 
         /** @brief Function for holding lighting uniforms */
         void drawLightUniforms(Shader* shader) {
-                shader->use();
                 shader->setVec3("viewPos", camera.Position);
                 shader->setMat4("projection", projection);
                 shader->setMat4("view", view);
@@ -702,9 +699,12 @@ private:
 
         /** @brief Draw floor for testing */
         void drawFloor(Shader* shader) {
-                shader->use();
                 glBindVertexArray(planeVAO);
                 glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, floorTexture);
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, floorTexture);
+                glActiveTexture(GL_TEXTURE2);
                 glBindTexture(GL_TEXTURE_2D, floorTexture);
                 shader->setMat4("model", glm::mat4(1.0f));
                 glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -813,6 +813,7 @@ private:
         }
 
         void render() {
+                std::map<float, glm::vec3> sorted;
                 for (uint8_t i = 0; i < windows.size(); i++) {
                         float distance = glm::length(camera.Position - windows[i]);
                         sorted[distance] = windows[i];
@@ -838,11 +839,11 @@ private:
                 cubeShader->setMat4("view", view);
                 // draw normal stencil test
                 drawFloor(cubeShader.get());
-                drawPointLights();
                 // drawModel(backpackScene.get());
-                
                 drawLightUniforms(cubeShader.get());
                 drawCubes(cubeShader.get());
+                
+                drawPointLights();
 
                 blendShader->use();
                 blendShader->setMat4("projection", projection);
