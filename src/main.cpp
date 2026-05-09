@@ -32,6 +32,7 @@
 #include <vector>
 #include <chrono>
 #include <memory>
+#include <map>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -127,6 +128,29 @@ float planeVertices[] = {
      5.0f, -0.5f, -5.0f,    0,1,0,          2.0f, 2.0f
 };
 
+float transparentVertices[] = {
+        // positions         // texture Coords (swapped y coordinates because texture is flipped upside down)
+        0.0f,  0.5f,  0.0f,  0.0f,  0.0f,
+        0.0f, -0.5f,  0.0f,  0.0f,  1.0f,
+        1.0f, -0.5f,  0.0f,  1.0f,  1.0f,
+
+        0.0f,  0.5f,  0.0f,  0.0f,  0.0f,
+        1.0f, -0.5f,  0.0f,  1.0f,  1.0f,
+        1.0f,  0.5f,  0.0f,  1.0f,  0.0f
+};
+
+// transparent window locations
+// --------------------------------
+std::vector<glm::vec3> windows
+{
+        glm::vec3(-1.5f, 0.0f, -0.48f),
+        glm::vec3( 1.5f, 0.0f, 0.51f),
+        glm::vec3( 0.0f, 0.0f, 0.7f),
+        glm::vec3(-0.3f, 0.0f, -2.3f),
+        glm::vec3( 0.5f, 0.0f, -0.6f)
+};
+
+
 // unsigned int indices[] = {  
 //         0, 1, 3, // first triangle
 //         1, 2, 3  // second triangle
@@ -176,6 +200,8 @@ float skyboxVertices[] = {
         -1.0f, -1.0f,  1.0f,
          1.0f, -1.0f,  1.0f
     };
+
+
 
 Camera camera{glm::vec3(0.0f, 0.0f, 3.0f)};
 float lastX = SCR_WIDTH / 2.0f;
@@ -242,16 +268,19 @@ private:
         uint32_t lightVAO;
         uint32_t skyboxVAO, skyboxVBO;
         uint32_t planeVAO, planeVBO;
+        uint32_t transparentVAO, transparentVBO;
         
         uint32_t texture;
         uint32_t cubeMapTexture;
         uint32_t floorTexture;
+        uint32_t transparentTexture;
 
         std::unique_ptr<Shader> modelShader;
         std::unique_ptr<Shader> stencilShader;
         std::unique_ptr<Shader> cubeShader;
         std::unique_ptr<Shader> lightShader;
         std::unique_ptr<Shader> cubeMapShader;
+        std::unique_ptr<Shader> blendShader;
 
         std::unique_ptr<Model> backpackScene;
 
@@ -266,6 +295,7 @@ private:
 
         // RenderPass queues
         std::vector<OutlineDrawCall> outlineQueue;
+        std::map<float, glm::vec3> sorted;
 
         glm::vec3 lightPos{1.2f, 1.0f, 2.0f};
 
@@ -307,9 +337,19 @@ private:
         void enableFeatures() {
                 glEnable(GL_DEPTH_TEST);
                 glDepthFunc(GL_LESS);
-                glEnable(GL_STENCIL_TEST);
-                glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-                glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
+                /** Formula for blending is (C = Csrc * Fsrc + Cdest * Fdest) where is Csrc and Cdest is color of source and destination
+                 * Fsrc and Fdest are the impact values of alpha channel on the color vectors.
+                 * Can be simplified to C = Csrc * alpha + Cdest * (1 - alpha)
+                 */
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // setting the state of blending
+                // glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO); // setting the state for RGB channels and alpha seperately
+                // glBlendEquation(GL_FUNC_ADD); // selecting equation: GL_FUNC_SUBTRACT, GL_FUNC_REVERSE_SUBTRACT, GL_MIN, GL_MAX, default is ADD
+                /** Stencil test is turned off until I develop a renderpass structure */
+                // glEnable(GL_STENCIL_TEST);
+                // glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+                // glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
         }
 
         void createShader() {
@@ -318,12 +358,14 @@ private:
                 lightShader = std::make_unique<Shader>("shaders/lightShader.vs", "shaders/lightShader.fs");
                 cubeMapShader = std::make_unique<Shader>("shaders/cubemap.vs", "shaders/cubemap.fs");
                 stencilShader = std::make_unique<Shader>("shaders/stencilShader.vs", "shaders/stencilShader.fs");
+                blendShader = std::make_unique<Shader>("shaders/blending.vs", "shaders/blending.fs");
         }
 
 
         void loadAssets() {
                 stbi_set_flip_vertically_on_load(true);
                 // backpackScene = std::make_unique<Model>("resources/models/backpack/backpack.obj");
+                transparentTexture = loadTexture("resources/textures/window.png");
                 floorTexture = loadTexture("resources/textures/metal.png");
                 
                 diffuseMap = loadTexture("resources/textures/container2.png");
@@ -444,6 +486,7 @@ private:
                         /** stride */ 
                         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
                         glEnableVertexAttribArray(0);
+                        
                         glBindVertexArray(0);
                 }
 
@@ -468,6 +511,26 @@ private:
                         glBindVertexArray(0);
                 }
 
+                /** WINDOW BUFFER */
+                {
+                        glGenVertexArrays(1, &transparentVAO);
+                        glGenBuffers(1, &transparentVBO);
+                        glBindVertexArray(transparentVAO);
+
+                        glBindBuffer(GL_ARRAY_BUFFER, transparentVBO);
+                        glBufferData(GL_ARRAY_BUFFER, sizeof(transparentVertices), &transparentVertices, GL_STATIC_DRAW);
+
+                        // positions (location = 0)
+                        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+                        glEnableVertexAttribArray(0);
+
+                        // texcoords (location = 1)
+                        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+                        glEnableVertexAttribArray(1);
+
+                        glBindVertexArray(0);
+                }
+
                 /** SKYBOX BUFFER */
                 {
 
@@ -481,7 +544,6 @@ private:
                         glEnableVertexAttribArray(0);
                         
                         glBindVertexArray(0);
-                        glBindBuffer(GL_ARRAY_BUFFER, 0);
                 }
 
         }
@@ -609,6 +671,7 @@ private:
                 model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
                 shader->setMat4("model", model);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
+                glBindVertexArray(0);
                 // for(unsigned int i = 0; i < 10; i++)
                 // {
                 //         glm::mat4 model = glm::mat4(1.0f);
@@ -734,10 +797,14 @@ private:
         }
 
         void render() {
-                glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+                for (uint8_t i = 0; i < windows.size(); i++) {
+                        float distance = glm::length(camera.Position - windows[i]);
+                        sorted[distance] = windows[i];
+                }
 
-                glStencilMask(0xFF); // if this is not turned on stencil buffer will not be cleared 
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+                glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 
                 projection = glm::perspective(
                         glm::radians(camera.Zoom),
@@ -748,10 +815,7 @@ private:
                 
                 view = camera.GetViewMatrix();
                 glm::mat4 model = glm::mat4(1.0f);
-                
-                glStencilMask(0x00);
 
-                // TODO: Remove these uniforms later and make this better in its own light shader
                 cubeShader->use();
                 cubeShader->setVec3("viewPos", camera.Position);
                 cubeShader->setMat4("projection", projection);
@@ -761,28 +825,25 @@ private:
                 drawPointLights();
                 // drawModel(backpackScene.get());
                 
-                drawCubeMap();
                 drawLightUniforms(cubeShader.get());
+                drawCubes(cubeShader.get());
 
-                // Bind textures once for all cube draws
+                blendShader->use();
+                blendShader->setMat4("projection", projection);
+                blendShader->setMat4("view", view);
+
                 glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, diffuseMap);
-                glActiveTexture(GL_TEXTURE1);
-                glBindTexture(GL_TEXTURE_2D, specularMap);
-                glActiveTexture(GL_TEXTURE2);
-                glBindTexture(GL_TEXTURE_2D, emissionMap);
-
-                // Outline Draw call
-                model = glm::mat4(1.0f);
-                model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
-                drawWithOutline(cubeShader.get(), cubeVAO, 36, model, glm::vec3(1.0f, 0.5f, 0.0f));
-
-                model = glm::mat4(1.0f);
-                model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
-                drawWithOutline(cubeShader.get(), cubeVAO, 36, model, glm::vec3(1.0f, 0.5f, 0.0f));
+                glBindTexture(GL_TEXTURE_2D, transparentTexture);
                 
-                
-                flushOutlinePass(1.05f);       
+                glBindVertexArray(transparentVAO);
+                for (auto it = sorted.rbegin(); it != sorted.rend(); it++) {
+                        model = glm::mat4(1.0f);
+                        model = glm::translate(model, it->second);
+                        blendShader->setMat4("model", model);
+                        glDrawArrays(GL_TRIANGLES, 0, 6);
+                }
+
+                drawCubeMap();
         }
 public:
 
@@ -809,23 +870,21 @@ public:
 
                 cubeMapShader->use();
                 cubeMapShader->setInt("skybox", 0);
-                // for (int i = 0; i < NR_POINT_LIGHTS; i++) {
-                //         pointLights.push_back({
-                //                 pointLightPositions[i],
-                //                 {0.05f, 0.05f, 0.05f},
-                //                 {0.8f, 0.8f, 0.8f},
-                //                 {1.0f, 1.0f, 1.0f},
-                //                 1.0f,
-                //                 0.09f,
-                //                 0.032f
-                //         });
-                // }
+                
+                blendShader->use();
+                blendShader->setInt("texture1", 0);
+
+
         }
 
         void clear() {
                 glDeleteVertexArrays(1, &cubeVAO);
                 glDeleteVertexArrays(1, &skyboxVAO);
                 glDeleteVertexArrays(1, &lightVAO);
+                glDeleteVertexArrays(1, &planeVAO);
+                glDeleteVertexArrays(1, &transparentVAO);
+                glDeleteBuffers(1, &planeVBO);
+                glDeleteBuffers(1, &transparentVBO);
                 glDeleteBuffers(1, &VBO);
                 glDeleteBuffers(1, &skyboxVBO);
         }
@@ -839,7 +898,7 @@ public:
 
                         processInput(dt);
 
-                        // Logger::Info("dt: {:.4f} ms | fps: {:.2f}", dt * 1000.0f, fps);
+                        Logger::Info("dt: {:.4f} ms | fps: {:.2f}", dt * 1000.0f, fps);
 
                         render();
 
