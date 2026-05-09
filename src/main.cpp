@@ -45,6 +45,17 @@
 #include "shader.h"
 #include "model.h"
 #include "logger.h"
+#include "profiling.h"
+
+// debug callback
+void GLAPIENTRY GLDebugMessageCallback(
+                GLenum source, GLenum type, GLuint id,
+                GLenum severity, GLsizei length,
+                const GLchar* message, const void* userParam)
+{
+        if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) return;
+        fprintf(stderr, "[GL] %s\n", message);
+}
 
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
@@ -201,8 +212,6 @@ float skyboxVertices[] = {
          1.0f, -1.0f,  1.0f
     };
 
-
-
 Camera camera{glm::vec3(0.0f, 0.0f, 3.0f)};
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
@@ -305,9 +314,10 @@ private:
 
         void inititializeOpenGL() {
                 glfwInit();
-                glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+                glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
                 glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
                 glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+                glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE); // for profiling with renderdoc
                 //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
         }
 
@@ -330,6 +340,12 @@ private:
                         Logger::Fatal("Failed to initialize GLAD");
                         return false;
                 }
+
+                // debug
+                glEnable(GL_DEBUG_OUTPUT);
+                glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+                glDebugMessageCallback(GLDebugMessageCallback, nullptr);
+                glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
                 
                 return true;
         }
@@ -898,7 +914,7 @@ public:
 
                         processInput(dt);
 
-                        Logger::Info("dt: {:.4f} ms | fps: {:.2f}", dt * 1000.0f, fps);
+                        // Logger::Info("dt: {:.4f} ms | fps: {:.2f}", dt * 1000.0f, fps);
 
                         render();
 
