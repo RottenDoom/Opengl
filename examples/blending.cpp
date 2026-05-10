@@ -295,9 +295,13 @@ private:
         glm::mat4 projection;
         glm::mat4 view;
 
-        // RenderPass queues
+                // RenderPass queues
         std::vector<OutlineDrawCall> outlineQueue;
-        std::map<float, glm::vec3> sorted;
+        struct TransparentEntry {
+                float    distSq;
+                glm::vec3 position;
+        };
+        std::vector<TransparentEntry> sortedWindows;
 
         glm::vec3 lightPos{1.2f, 1.0f, 2.0f};
 
@@ -307,9 +311,10 @@ private:
 
         void inititializeOpenGL() {
                 glfwInit();
-                glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+                glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
                 glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
                 glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+                glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE); // for profiling with renderdoc
                 //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
         }
 
@@ -611,7 +616,6 @@ private:
 
         /** @brief Function for holding lighting uniforms */
         void drawLightUniforms(Shader* shader) {
-                shader->use();
                 shader->setVec3("viewPos", camera.Position);
                 shader->setMat4("projection", projection);
                 shader->setMat4("view", view);
@@ -688,9 +692,12 @@ private:
 
         /** @brief Draw floor for testing */
         void drawFloor(Shader* shader) {
-                shader->use();
                 glBindVertexArray(planeVAO);
                 glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, floorTexture);
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, floorTexture);
+                glActiveTexture(GL_TEXTURE2);
                 glBindTexture(GL_TEXTURE_2D, floorTexture);
                 shader->setMat4("model", glm::mat4(1.0f));
                 glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -799,10 +806,17 @@ private:
         }
 
         void render() {
-                for (uint8_t i = 0; i < windows.size(); i++) {
-                        float distance = glm::length(camera.Position - windows[i]);
-                        sorted[distance] = windows[i];
+                sortedWindows.clear(); 
+                for (const auto& w : windows) {
+                        glm::vec3 diff = camera.Position - w;
+                        float distSq = glm::dot(diff, diff); // no sqrt
+                        sortedWindows.push_back({ distSq, w });
                 }
+                std::sort(sortedWindows.begin(), sortedWindows.end(),
+                        [](const TransparentEntry& a, const TransparentEntry& b) {
+                        return a.distSq > b.distSq; // far to near
+                        }
+                );
 
 
                 glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -824,11 +838,12 @@ private:
                 cubeShader->setMat4("view", view);
                 // draw normal stencil test
                 drawFloor(cubeShader.get());
-                drawPointLights();
                 // drawModel(backpackScene.get());
-                
                 drawLightUniforms(cubeShader.get());
                 drawCubes(cubeShader.get());
+
+                drawPointLights();
+                drawCubeMap();
 
                 blendShader->use();
                 blendShader->setMat4("projection", projection);
@@ -838,14 +853,14 @@ private:
                 glBindTexture(GL_TEXTURE_2D, transparentTexture);
                 
                 glBindVertexArray(transparentVAO);
-                for (auto it = sorted.rbegin(); it != sorted.rend(); it++) {
+                for (const auto& entry : sortedWindows) {
                         model = glm::mat4(1.0f);
-                        model = glm::translate(model, it->second);
+                        model = glm::translate(model, entry.position);
                         blendShader->setMat4("model", model);
                         glDrawArrays(GL_TRIANGLES, 0, 6);
                 }
 
-                drawCubeMap();
+                
         }
 public:
 
@@ -876,7 +891,7 @@ public:
                 blendShader->use();
                 blendShader->setInt("texture1", 0);
 
-
+                sortedWindows.reserve(windows.size());
         }
 
         void clear() {

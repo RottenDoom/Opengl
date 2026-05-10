@@ -303,6 +303,11 @@ private:
 
         // RenderPass queues
         std::vector<OutlineDrawCall> outlineQueue;
+        struct TransparentEntry {
+                float    distSq;
+                glm::vec3 position;
+        };
+        std::vector<TransparentEntry> sortedWindows;
 
         glm::vec3 lightPos{1.2f, 1.0f, 2.0f};
 
@@ -813,11 +818,17 @@ private:
         }
 
         void render() {
-                std::map<float, glm::vec3> sorted;
-                for (uint8_t i = 0; i < windows.size(); i++) {
-                        float distance = glm::length(camera.Position - windows[i]);
-                        sorted[distance] = windows[i];
+                sortedWindows.clear(); 
+                for (const auto& w : windows) {
+                        glm::vec3 diff = camera.Position - w;
+                        float distSq = glm::dot(diff, diff); // no sqrt
+                        sortedWindows.push_back({ distSq, w });
                 }
+                std::sort(sortedWindows.begin(), sortedWindows.end(),
+                        [](const TransparentEntry& a, const TransparentEntry& b) {
+                        return a.distSq > b.distSq; // far to near
+                        }
+                );
 
 
                 glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -842,8 +853,9 @@ private:
                 // drawModel(backpackScene.get());
                 drawLightUniforms(cubeShader.get());
                 drawCubes(cubeShader.get());
-                
+
                 drawPointLights();
+                drawCubeMap();
 
                 blendShader->use();
                 blendShader->setMat4("projection", projection);
@@ -853,14 +865,14 @@ private:
                 glBindTexture(GL_TEXTURE_2D, transparentTexture);
                 
                 glBindVertexArray(transparentVAO);
-                for (auto it = sorted.rbegin(); it != sorted.rend(); it++) {
+                for (const auto& entry : sortedWindows) {
                         model = glm::mat4(1.0f);
-                        model = glm::translate(model, it->second);
+                        model = glm::translate(model, entry.position);
                         blendShader->setMat4("model", model);
                         glDrawArrays(GL_TRIANGLES, 0, 6);
                 }
 
-                drawCubeMap();
+                
         }
 public:
 
@@ -891,7 +903,7 @@ public:
                 blendShader->use();
                 blendShader->setInt("texture1", 0);
 
-
+                sortedWindows.reserve(windows.size());
         }
 
         void clear() {
