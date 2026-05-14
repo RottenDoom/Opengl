@@ -44,7 +44,10 @@
 #include "camera.h"
 #include "shader.h"
 #include "model.h"
+#include "framebuffer.h"
 #include "logger.h"
+
+#define PROFILER_SCOPE(x)
 
 // debug callback
 void GLAPIENTRY GLDebugMessageCallback(
@@ -55,9 +58,6 @@ void GLAPIENTRY GLDebugMessageCallback(
         if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) return;
         fprintf(stderr, "[GL] %s\n", message);
 }
-
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
 
 static bool emissionEnabled = false;
 #define NR_POINT_LIGHTS 4
@@ -218,9 +218,28 @@ float skyboxVertices[] = {
          1.0f, -1.0f,  1.0f
     };
 
-Camera camera{glm::vec3(0.0f, 0.0f, 3.0f)};
-float lastX = SCR_WIDTH / 2.0f;
-float lastY = SCR_HEIGHT / 2.0f;
+float quadVertices[] = {
+        // positions   // texCoords
+        -1.0f,  1.0f,  0.0f, 1.0f,
+        -1.0f, -1.0f,  0.0f, 0.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
+
+        -1.0f,  1.0f,  0.0f, 1.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
+         1.0f,  1.0f,  1.0f, 1.0f
+};
+
+// Enum for postprocess effects
+enum PostProcess : uint32_t {
+        INVERSION = 1u << 0u,
+        GRAYSCALE = 1u << 1u,
+};
+
+enum KernelEffect : uint32_t {
+        SHARPEN   = 1u << 2u,
+        BLUR      = 1u << 3u,
+        EDGE      = 1u << 4u
+};
 
 bool firstMouse = true;
 
@@ -272,6 +291,13 @@ struct OutlineDrawCall {
     glm::vec3   color;       // outline tint, passed to stencilShader
 };
 
+static unsigned int SCR_WIDTH = 800;
+static unsigned int SCR_HEIGHT = 600;
+
+Camera camera{glm::vec3(0.0f, 0.0f, 3.0f)};
+static float lastX = SCR_WIDTH / 2.0f;
+static float lastY = SCR_HEIGHT / 2.0f;
+
 
 class App
 {
@@ -284,6 +310,10 @@ private:
         uint32_t skyboxVAO, skyboxVBO;
         uint32_t planeVAO, planeVBO;
         uint32_t transparentVAO, transparentVBO;
+        uint32_t quadVAO, quadVBO;
+        
+        Framebuffer fb; // screen fbo
+        Framebuffer postfbo; // postfbo
         
         uint32_t texture;
         uint32_t cubeMapTexture;
@@ -296,6 +326,9 @@ private:
         std::unique_ptr<Shader> lightShader;
         std::unique_ptr<Shader> cubeMapShader;
         std::unique_ptr<Shader> blendShader;
+        std::unique_ptr<Shader> screenShader;
+        std::unique_ptr<Shader> postShader;
+
 
         std::unique_ptr<Model> backpackScene;
 
@@ -344,6 +377,7 @@ private:
                 glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
                 glfwSetCursorPosCallback(window, mouse_callback);
                 glfwSetScrollCallback(window, scroll_callback);
+                glfwSetWindowUserPointer(window, this);
 
                 if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
                 {
@@ -361,24 +395,24 @@ private:
         }
 
         void enableFeatures() {
+                /** Depth Test */
                 glEnable(GL_DEPTH_TEST);
                 glDepthFunc(GL_LESS);
 
-                /** Formula for blending is (C = Csrc * Fsrc + Cdest * Fdest) where is Csrc and Cdest is color of source and destination
-                 * Fsrc and Fdest are the impact values of alpha channel on the color vectors.
-                 * Can be simplified to C = Csrc * alpha + Cdest * (1 - alpha)
-                 */
+                /** Blending */
                 glEnable(GL_BLEND);
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // setting the state of blending
-                // glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO); // setting the state for RGB channels and alpha seperately
-                // glBlendEquation(GL_FUNC_ADD); // selecting equation: GL_FUNC_SUBTRACT, GL_FUNC_REVERSE_SUBTRACT, GL_MIN, GL_MAX, default is ADD
-                /** Stencil test is turned off until I develop a renderpass structure */
+                // glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
+                // glBlendEquation(GL_FUNC_ADD);
+
+                /** Stencil Test */
                 // glEnable(GL_STENCIL_TEST);
                 // glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
                 // glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-
-                glEnable(GL_CULL_FACE);
-                glCullFace(GL_BACK); // culls back faces
+                
+                /** Face Culling */
+                // glEnable(GL_CULL_FACE);
+                // glCullFace(GL_BACK); // culls back faces
         }
 
         void createShader() {
@@ -388,6 +422,8 @@ private:
                 cubeMapShader = std::make_unique<Shader>("shaders/cubemap.vs", "shaders/cubemap.fs");
                 stencilShader = std::make_unique<Shader>("shaders/stencilShader.vs", "shaders/stencilShader.fs");
                 blendShader = std::make_unique<Shader>("shaders/blending.vs", "shaders/blending.fs");
+                screenShader = std::make_unique<Shader>("shaders/screen.vs", "shaders/screen.fs");
+                postShader = std::make_unique<Shader>("shaders/screen.vs", "shaders/post.fs");
         }
 
 
@@ -560,6 +596,28 @@ private:
                         glBindVertexArray(0);
                 }
 
+                /** QUAD BUFFER */
+                {
+                        glGenVertexArrays(1, &quadVAO);
+                        glGenBuffers(1, &quadVBO);
+                        glBindVertexArray(quadVAO);
+
+                        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+                        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+
+                        // position (location = 0)
+                        // positions (location = 0)
+                        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+                        glEnableVertexAttribArray(0);
+
+                        // texcoords (location = 1)
+                        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+                        glEnableVertexAttribArray(1);
+
+                        glBindVertexArray(0);
+                }
+
+
                 /** SKYBOX BUFFER */
                 {
 
@@ -606,8 +664,20 @@ private:
                         camera.ProcessKeyboard(RIGHT, deltaTime);
         }
 
+        void onResize(int width, int height)
+        {
+                if (width == 0 || height == 0)
+                        return;
+
+                fb.Resize(width, height);
+                postfbo.Resize(width, height);
+                SCR_WIDTH = width;
+                SCR_HEIGHT = height;
+        }
+
         static void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-                glViewport(0, 0, width, height);
+                App* app = static_cast<App*>(glfwGetWindowUserPointer(window));
+                app->onResize(width, height);
         }
 
         static void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
@@ -827,7 +897,8 @@ private:
                 // glEnable(GL_DEPTH_TEST);
         }
 
-        void render() {
+        void drawScene() {
+                // TODO: make a blend pass
                 sortedWindows.clear(); 
                 for (const auto& w : windows) {
                         glm::vec3 diff = camera.Position - w;
@@ -839,10 +910,6 @@ private:
                         return a.distSq > b.distSq; // far to near
                         }
                 );
-
-
-                glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 
                 projection = glm::perspective(
                         glm::radians(camera.Zoom),
@@ -881,8 +948,51 @@ private:
                         blendShader->setMat4("model", model);
                         glDrawArrays(GL_TRIANGLES, 0, 6);
                 }
+        }
 
-                
+        void render() 
+        {
+                PROFILER_SCOPE("Frame");
+                {
+                        PROFILER_SCOPE("ScreenPass"); // off screen render for now
+                        fb.Bind();
+                        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+                        glEnable(GL_DEPTH_TEST);
+                        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+                        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        
+                        drawScene();
+        
+                        fb.Unbind();
+                }
+
+                {
+                        PROFILER_SCOPE("PostProcessPass"); // actual scene that we will render
+                        postfbo.Bind();
+                        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+                        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // we're not using the stencil buffer now
+                        glEnable(GL_DEPTH_TEST);
+                        drawScene();
+                }
+
+                {
+                        PROFILER_SCOPE("CompositerPass") // I am going to include ImGUI later here so we do not composite for now
+                        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                        glClearColor(1.0f, 1.0f, 1.0f, 1.0f); 
+                        glClear(GL_COLOR_BUFFER_BIT);
+
+                        postShader->use();
+                        glBindVertexArray(quadVAO);
+                        glDisable(GL_DEPTH_TEST);
+                        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, postfbo.GetTexture());
+                        postShader->setInt("screenTexture", 0);
+                        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+                        glBindVertexArray(0);
+                        glEnable(GL_DEPTH_TEST);
+                }
         }
 public:
 
@@ -907,6 +1017,21 @@ public:
                 cubeShader->setInt("material.emission", 2);
                 cubeShader->setBool("useEmission", emissionEnabled);
 
+                screenShader->use();
+                screenShader->setInt("screenTexture", 0);
+                fb.Init(SCR_WIDTH, SCR_HEIGHT);
+                fb.AttachDepthStencil();
+
+                postfbo.Init(SCR_WIDTH, SCR_HEIGHT);
+                postfbo.AttachDepthStencil();
+
+                // Post Effects
+                postShader->use();
+                uint32_t postfx = 0;
+                postfx |= INVERSION;
+                postfx |= BLUR;
+                postShader->setUInt("postfx", postfx);
+
                 cubeMapShader->use();
                 cubeMapShader->setInt("skybox", 0);
                 
@@ -922,10 +1047,12 @@ public:
                 glDeleteVertexArrays(1, &lightVAO);
                 glDeleteVertexArrays(1, &planeVAO);
                 glDeleteVertexArrays(1, &transparentVAO);
+                glDeleteVertexArrays(1, &quadVAO);
                 glDeleteBuffers(1, &planeVBO);
                 glDeleteBuffers(1, &transparentVBO);
                 glDeleteBuffers(1, &VBO);
                 glDeleteBuffers(1, &skyboxVBO);
+                glDeleteBuffers(1, &quadVBO);
         }
 
         void run() {
